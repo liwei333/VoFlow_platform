@@ -48,7 +48,7 @@
   - 节点失败时同步 job error
   - _Requirements: US-2_
 
-- [ ] 7. 实现任务详情 API
+- [x] 7. 实现任务详情 API
   - 返回任务基础信息
   - 返回节点列表和每个节点最新版本
   - 返回 artifacts 摘要
