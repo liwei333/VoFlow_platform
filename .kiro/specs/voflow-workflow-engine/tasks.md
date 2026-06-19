@@ -42,7 +42,7 @@
   - succeeded -> waiting_approval/approved
   - _Requirements: US-2, US-4_
 
-- [ ] 6. 实现任务进度计算
+- [x] 6. 实现任务进度计算
   - 按节点权重计算 progress
   - 更新 current_node
   - 节点失败时同步 job error

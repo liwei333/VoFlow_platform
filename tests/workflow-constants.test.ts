@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   WORKFLOW_NODE_TYPES,
   WORKFLOW_NODE_DEFINITIONS,
+  DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   DEFAULT_WORKFLOW_TEMPLATE,
   getWorkflowNodeDefinition,
   isWorkflowNodeType,
@@ -53,6 +54,7 @@ describe("WORKFLOW_NODE_DEFINITIONS", () => {
       expect(typeof def.order).toBe("number");
       expect(typeof def.requiresApproval).toBe("boolean");
       expect(typeof def.retryable).toBe("boolean");
+      expect(typeof def.progressWeight).toBe("number");
     });
   });
 
@@ -81,6 +83,14 @@ describe("WORKFLOW_NODE_DEFINITIONS", () => {
       if (type !== "publish") {
         expect(WORKFLOW_NODE_DEFINITIONS[type].retryable).toBe(true);
       }
+    });
+  });
+
+  it("should define a progress weight for each node", () => {
+    WORKFLOW_NODE_TYPES.forEach((type) => {
+      expect(WORKFLOW_NODE_DEFINITIONS[type].progressWeight).toBe(
+        DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT
+      );
     });
   });
 });

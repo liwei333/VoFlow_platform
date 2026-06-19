@@ -37,11 +37,14 @@ export const WORKFLOW_NODE_TYPES = [
 
 export type WorkflowNodeType = (typeof WORKFLOW_NODE_TYPES)[number];
 
+export const DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT = 1;
+
 export interface WorkflowNodeDefinition {
   type: WorkflowNodeType;
   order: number;
   requiresApproval: boolean;
   retryable: boolean;
+  progressWeight: number;
 }
 
 export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDefinition> = {
@@ -50,78 +53,91 @@ export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDef
     order: 1,
     requiresApproval: false,
     retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   script_prepare: {
     type: "script_prepare",
     order: 2,
     requiresApproval: false,
     retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   script_rewrite: {
     type: "script_rewrite",
     order: 3,
     requiresApproval: false,
     retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   legal_review: {
     type: "legal_review",
     order: 4,
     requiresApproval: true,
     retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   voice_clone: {
     type: "voice_clone",
     order: 5,
     requiresApproval: true,
     retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   tts: {
     type: "tts",
     order: 6,
     requiresApproval: false,
     retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   avatar_render: {
     type: "avatar_render",
     order: 7,
     requiresApproval: false,
     retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   editing_preview: {
     type: "editing_preview",
     order: 8,
     requiresApproval: true,
     retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   subtitle: {
     type: "subtitle",
     order: 9,
     requiresApproval: false,
     retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   bgm_mix: {
     type: "bgm_mix",
     order: 10,
     requiresApproval: false,
     retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   cover: {
     type: "cover",
     order: 11,
     requiresApproval: false,
     retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   final_export: {
     type: "final_export",
     order: 12,
     requiresApproval: false,
     retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   publish: {
     type: "publish",
     order: 13,
     requiresApproval: true,
     retryable: false,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
 } as const;
 
