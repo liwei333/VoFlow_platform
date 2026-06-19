@@ -35,7 +35,7 @@
   - 处理队列投递失败
   - _Requirements: US-1, US-3_
 
-- [ ] 5. 实现节点状态流转服务
+- [x] 5. 实现节点状态流转服务
   - pending -> queued
   - queued -> running
   - running -> succeeded/failed
