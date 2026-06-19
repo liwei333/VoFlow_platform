@@ -29,7 +29,7 @@
   - 投递第一个节点到队列 Adapter
   - _Requirements: US-1_
 
-- [ ] 4. 实现队列 Adapter
+- [x] 4. 实现队列 Adapter
   - 封装 enqueue、retry、cancel 基础方法
   - 统一 job payload：jobId、nodeId、nodeType、version、traceId
   - 处理队列投递失败

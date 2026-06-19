@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
-import { workflowQueue, type WorkflowQueue, type WorkflowQueuePayload } from "@/lib/queue/adapter";
+import {
+  workflowQueue,
+  type WorkflowQueueEnqueuer,
+  type WorkflowQueuePayload,
+} from "@/lib/queue/adapter";
 import { WORKFLOW_ERROR_CODES, workflowError, type WorkflowError } from "@/lib/workflow/errors";
 import { createWorkflowTraceId } from "@/lib/workflow/trace";
 import {
@@ -21,7 +25,7 @@ export interface CreateVideoJobOutput {
 export type CreateVideoJobError = WorkflowError;
 
 export interface CreateVideoJobDependencies {
-  queue: WorkflowQueue;
+  queue: WorkflowQueueEnqueuer;
   createTraceId: () => string;
 }
 
@@ -122,7 +126,6 @@ export async function createVideoJob(
         traceId: createTraceId(),
       };
 
-      // Phase 4 should replace this with a reliable queue/outbox boundary.
       enqueueAttempted = true;
       await queue.enqueue(firstNodePayload);
 

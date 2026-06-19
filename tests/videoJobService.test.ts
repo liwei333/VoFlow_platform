@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { prisma } from "@/lib/db";
-import { MemoryWorkflowQueue, type WorkflowQueue } from "@/lib/queue/adapter";
+import { MemoryWorkflowQueue, type WorkflowQueueEnqueuer } from "@/lib/queue/adapter";
 import { createVideoJob } from "@/services/videoJobService";
 import { WORKFLOW_ERROR_CODES } from "@/lib/workflow/errors";
 import { DEFAULT_WORKFLOW_TEMPLATE, WORKFLOW_NODE_DEFINITIONS } from "@/lib/workflow/constants";
@@ -138,7 +138,7 @@ describe("createVideoJob", () => {
       ownerId: testUser.id,
       teamId: testTeam.id,
     },
-    queue: WorkflowQueue = testQueue
+    queue: WorkflowQueueEnqueuer = testQueue
   ) {
     const result = await createVideoJob(input, {
       queue,
@@ -290,7 +290,7 @@ describe("createVideoJob", () => {
   });
 
   it("should not leave video job or nodes when enqueue fails", async () => {
-    const failingQueue: WorkflowQueue = {
+    const failingQueue: WorkflowQueueEnqueuer = {
       enqueue: async () => {
         throw new Error("queue unavailable");
       },
