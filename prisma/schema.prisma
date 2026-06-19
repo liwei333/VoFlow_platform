@@ -56,6 +56,26 @@ enum AuditAction {
   job_update
 }
 
+enum VideoJobStatus {
+  pending
+  queued
+  running
+  succeeded
+  failed
+  cancelled
+}
+
+enum WorkflowNodeStatus {
+  pending
+  queued
+  running
+  succeeded
+  failed
+  waiting_approval
+  approved
+  cancelled
+}
+
 model Asset {
   id            String        @id @default(cuid())
   teamId        String
@@ -71,7 +91,7 @@ model Asset {
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
 
-  owner    User @relation("AssetOwner", fields: [ownerId], references: [id])
+  owner    User           @relation("AssetOwner", fields: [ownerId], references: [id])
   consents AssetConsent[]
 
   @@index([teamId, createdAt])
@@ -81,16 +101,16 @@ model Asset {
 }
 
 model AssetConsent {
-  id           String   @id @default(cuid())
-  assetId      String
-  teamId       String
-  userId       String
-  consentType  String
-  consentText  String
-  usageScope   String[]
-  ipAddress    String?
-  device       Json?
-  createdAt    DateTime @default(now())
+  id          String   @id @default(cuid())
+  assetId     String
+  teamId      String
+  userId      String
+  consentType String
+  consentText String
+  usageScope  String[]
+  ipAddress   String?
+  device      Json?
+  createdAt   DateTime @default(now())
 
   asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id])
@@ -101,14 +121,14 @@ model AssetConsent {
 }
 
 model AuditLog {
-  id          String      @id @default(cuid())
-  teamId      String
-  userId      String
-  action      AuditAction
-  targetType  String
-  targetId    String
-  metadata    Json?
-  createdAt   DateTime    @default(now())
+  id         String      @id @default(cuid())
+  teamId     String
+  userId     String
+  action     AuditAction
+  targetType String
+  targetId   String
+  metadata   Json?
+  createdAt  DateTime    @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
@@ -119,21 +139,22 @@ model AuditLog {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String?   @unique
-  phone        String?   @unique
+  id           String     @id @default(cuid())
+  email        String?    @unique
+  phone        String?    @unique
   passwordHash String
   name         String
   status       UserStatus @default(active)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  ownedTeams      Team[]        @relation("TeamOwner")
+  ownedTeams      Team[]         @relation("TeamOwner")
   teamMemberships TeamMember[]
-  ownedProjects   Project[]     @relation("ProjectOwner")
-  uploadedAssets  Asset[]       @relation("AssetOwner")
+  ownedProjects   Project[]      @relation("ProjectOwner")
+  uploadedAssets  Asset[]        @relation("AssetOwner")
   assetConsents   AssetConsent[]
   auditLogs       AuditLog[]
+  videoJobs       VideoJob[]     @relation("VideoJobOwner")
 
   @@map("users")
 }
@@ -145,9 +166,10 @@ model Team {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner    User          @relation("TeamOwner", fields: [ownerId], references: [id])
-  members  TeamMember[]
-  projects Project[]
+  owner     User         @relation("TeamOwner", fields: [ownerId], references: [id])
+  members   TeamMember[]
+  projects  Project[]
+  videoJobs VideoJob[]
 
   @@map("teams")
 }
@@ -167,18 +189,86 @@ model TeamMember {
 }
 
 model Project {
-  id           String        @id @default(cuid())
-  teamId       String
-  ownerId      String
-  name         String
+  id             String        @id @default(cuid())
+  teamId         String
+  ownerId        String
+  name           String
   targetPlatform String
-  aspectRatio  AspectRatio
-  status       ProjectStatus @default(active)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  aspectRatio    AspectRatio
+  status         ProjectStatus @default(active)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  owner User  @relation("ProjectOwner", fields: [ownerId], references: [id])
+  team      Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner     User       @relation("ProjectOwner", fields: [ownerId], references: [id])
+  videoJobs VideoJob[]
 
   @@map("projects")
+}
+
+model VideoJob {
+  id           String         @id @default(cuid())
+  projectId    String
+  teamId       String
+  ownerId      String
+  status       VideoJobStatus @default(pending)
+  currentNode  String?
+  progress     Int            @default(0)
+  errorCode    String?
+  errorMessage String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner     User           @relation("VideoJobOwner", fields: [ownerId], references: [id])
+  nodes     WorkflowNode[]
+  artifacts Artifact[]
+
+  @@index([projectId])
+  @@index([teamId, createdAt])
+  @@index([status])
+  @@map("video_jobs")
+}
+
+model WorkflowNode {
+  id               String             @id @default(cuid())
+  jobId            String
+  nodeType         String
+  status           WorkflowNodeStatus @default(pending)
+  version          Int                @default(1)
+  input            Json?
+  output           Json?
+  error            Json?
+  retryCount       Int                @default(0)
+  requiresApproval Boolean            @default(false)
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  job       VideoJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  artifacts Artifact[]
+
+  @@index([jobId])
+  @@index([jobId, nodeType])
+  @@index([status])
+  @@map("workflow_nodes")
+}
+
+model Artifact {
+  id         String   @id @default(cuid())
+  jobId      String
+  nodeId     String
+  type       String
+  storageUrl String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  job  VideoJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  node WorkflowNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([nodeId])
+  @@map("artifacts")
 }

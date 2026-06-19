@@ -1,0 +1,32 @@
+export const WORKFLOW_ERROR_CODES = {
+  PROJECT_NOT_FOUND: "PROJECT_NOT_FOUND",
+  PROJECT_ACCESS_DENIED: "PROJECT_ACCESS_DENIED",
+  PROJECT_ARCHIVED: "PROJECT_ARCHIVED",
+  TEAM_ACCESS_DENIED: "TEAM_ACCESS_DENIED",
+  ENQUEUE_FAILED: "WORKFLOW_ENQUEUE_FAILED",
+  INTERNAL_ERROR: "WORKFLOW_INTERNAL_ERROR",
+} as const;
+
+export type WorkflowErrorCode =
+  (typeof WORKFLOW_ERROR_CODES)[keyof typeof WORKFLOW_ERROR_CODES];
+
+export interface WorkflowError {
+  code: WorkflowErrorCode;
+  message: string;
+}
+
+export const WORKFLOW_ERROR_MESSAGES: Record<WorkflowErrorCode, string> = {
+  [WORKFLOW_ERROR_CODES.PROJECT_NOT_FOUND]: "项目不存在",
+  [WORKFLOW_ERROR_CODES.PROJECT_ACCESS_DENIED]: "无权访问该项目",
+  [WORKFLOW_ERROR_CODES.PROJECT_ARCHIVED]: "项目已归档",
+  [WORKFLOW_ERROR_CODES.TEAM_ACCESS_DENIED]: "团队权限不足",
+  [WORKFLOW_ERROR_CODES.ENQUEUE_FAILED]: "队列投递失败",
+  [WORKFLOW_ERROR_CODES.INTERNAL_ERROR]: "任务创建失败",
+};
+
+export function workflowError(code: WorkflowErrorCode): WorkflowError {
+  return {
+    code,
+    message: WORKFLOW_ERROR_MESSAGES[code],
+  };
+}

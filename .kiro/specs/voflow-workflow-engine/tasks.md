@@ -2,7 +2,7 @@
 
 ## Implementation Plan
 
-- [ ] 0. 执行后续开发规范检查
+- [x] 0. 执行后续开发规范检查
   - 先阅读 `docs/03-VoFlow开发执行规范.md`
   - 本 Spec 不得新增运行时硬编码配置、任务节点类型、状态文案、错误码、重试次数或队列 payload 字段
   - 任务节点枚举、状态机、队列 payload、artifact serializer、API 响应必须优先进入公共 helper/service
@@ -10,23 +10,23 @@
   - Checkpoint 反馈必须包含硬编码检查、公共函数提取情况和验证命令
   - _Requirements: US-1, US-2, US-3, US-4_
 
-- [ ] 1. 创建任务相关数据库迁移
+- [x] 1. 创建任务相关数据库迁移
   - 创建 `video_jobs`、`workflow_nodes`、`artifacts`
   - 添加 status、progress、version 校验
   - 添加 project_id、team_id、job_id 索引
   - _Requirements: US-1, US-2_
 
-- [ ] 2. 定义工作流节点枚举和默认模板
-  - 定义原型对齐节点顺序：reference_extract、script_rewrite、legal_review、voice_clone、tts、avatar_render、editing_preview、final_export、publish
-  - 标记哪些节点需要人工确认
-  - 标记哪些节点可重试
+- [x] 2. 定义工作流节点枚举和默认模板
+  - 定义 MVP 13个节点顺序：reference_extract、script_prepare、script_rewrite、legal_review、voice_clone、tts、avatar_render、editing_preview、subtitle、bgm_mix、cover、final_export、publish
+  - 标记哪些节点需要人工确认：legal_review、voice_clone、editing_preview、publish
+  - 标记哪些节点可重试：除 publish 外都可重试
   - _Requirements: US-1, US-4_
 
-- [ ] 3. 实现任务创建服务
-  - 校验项目权限
-  - 创建 video_job
-  - 批量创建 workflow_nodes
-  - 投递第一个节点到队列
+- [x] 3. 实现任务创建服务
+  - 校验项目权限（项目存在、团队归属、团队成员）
+  - 创建 video_job 记录
+  - 按模板批量创建 13 个 workflow_nodes
+  - 投递第一个节点到队列 Adapter
   - _Requirements: US-1_
 
 - [ ] 4. 实现队列 Adapter
