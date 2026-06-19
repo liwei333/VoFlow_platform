@@ -1,0 +1,8 @@
+{
+  "featureName": "voflow-advanced-editing",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-advanced-editing-20260619",
+  "depends": ["voflow-video-render", "voflow-assets-compliance"]
+}

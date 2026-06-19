@@ -1,0 +1,8 @@
+{
+  "featureName": "voflow-tts",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-tts-20260619",
+  "depends": ["voflow-workflow-engine", "voflow-assets-compliance"]
+}

@@ -1,0 +1,8 @@
+{
+  "featureName": "voflow-script-ai",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-script-ai-20260619",
+  "depends": ["voflow-workflow-engine"]
+}

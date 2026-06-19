@@ -1,0 +1,8 @@
+{
+  "featureName": "voflow-video-render",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-video-render-20260619",
+  "depends": ["voflow-tts", "voflow-self-avatar", "voflow-workflow-engine"]
+}

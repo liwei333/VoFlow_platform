@@ -1,0 +1,8 @@
+{
+  "featureName": "voflow-voice-clone",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-voice-clone-20260619",
+  "depends": ["voflow-tts", "voflow-assets-compliance"]
+}

@@ -1,0 +1,8 @@
+{
+  "featureName": "voflow-packaging-export",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-packaging-export-20260619",
+  "depends": ["voflow-script-ai", "voflow-video-render"]
+}

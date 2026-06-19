@@ -1,0 +1,8 @@
+{
+  "featureName": "voflow-local-model-monitor",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-local-model-monitor-20260619",
+  "depends": ["voflow-foundation"]
+}

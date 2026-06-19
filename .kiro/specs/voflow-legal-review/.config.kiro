@@ -1,0 +1,8 @@
+{
+  "featureName": "voflow-legal-review",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-legal-review-20260619",
+  "depends": ["voflow-script-ai"]
+}

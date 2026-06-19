@@ -1,0 +1,8 @@
+{
+  "featureName": "voflow-publish-assistant",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-publish-assistant-20260619",
+  "depends": ["voflow-packaging-export"]
+}

@@ -1,0 +1,8 @@
+{
+  "featureName": "voflow-self-avatar",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-self-avatar-20260619",
+  "depends": ["voflow-assets-compliance"]
+}

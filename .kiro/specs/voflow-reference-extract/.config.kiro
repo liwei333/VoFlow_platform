@@ -1,0 +1,8 @@
+{
+  "featureName": "voflow-reference-extract",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-reference-extract-20260619",
+  "depends": ["voflow-workflow-engine", "voflow-local-model-monitor"]
+}

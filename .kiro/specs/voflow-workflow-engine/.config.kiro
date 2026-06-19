@@ -1,0 +1,8 @@
+{
+  "featureName": "voflow-workflow-engine",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-workflow-engine-20260619",
+  "depends": ["voflow-foundation", "voflow-assets-compliance"]
+}
