@@ -1,0 +1,8 @@
+{
+  "featureName": "voflow-assets-compliance",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-assets-compliance-20260619",
+  "depends": ["voflow-foundation"]
+}

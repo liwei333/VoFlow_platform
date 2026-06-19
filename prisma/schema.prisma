@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  active
+  disabled
+}
+
+enum TeamRole {
+  owner
+  admin
+  member
+}
+
+enum AspectRatio {
+  ratio_9_16
+  ratio_16_9
+  ratio_1_1
+}
+
+enum ProjectStatus {
+  active
+  archived
+}
+
+enum AssetType {
+  image
+  audio
+  video
+  subtitle
+  bgm
+  cover
+  avatar_source
+  artifact
+}
+
+enum LicenseStatus {
+  pending
+  approved
+  rejected
+  expired
+}
+
+enum AuditAction {
+  asset_upload
+  asset_update
+  asset_delete
+  asset_consent
+  job_create
+  job_update
+}
+
+model Asset {
+  id            String        @id @default(cuid())
+  teamId        String
+  ownerId       String
+  type          AssetType
+  name          String
+  storageUrl    String
+  mimeType      String
+  sizeBytes     BigInt
+  metadata      Json?
+  licenseStatus LicenseStatus @default(pending)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  owner    User @relation("AssetOwner", fields: [ownerId], references: [id])
+  consents AssetConsent[]
+
+  @@index([teamId, createdAt])
+  @@index([teamId, type])
+  @@index([teamId, licenseStatus])
+  @@map("assets")
+}
+
+model AssetConsent {
+  id           String   @id @default(cuid())
+  assetId      String
+  teamId       String
+  userId       String
+  consentType  String
+  consentText  String
+  usageScope   String[]
+  ipAddress    String?
+  device       Json?
+  createdAt    DateTime @default(now())
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@index([assetId])
+  @@index([teamId])
+  @@map("asset_consents")
+}
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  teamId      String
+  userId      String
+  action      AuditAction
+  targetType  String
+  targetId    String
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([teamId, createdAt])
+  @@index([teamId, action])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String?   @unique
+  phone        String?   @unique
+  passwordHash String
+  name         String
+  status       UserStatus @default(active)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  ownedTeams      Team[]        @relation("TeamOwner")
+  teamMemberships TeamMember[]
+  ownedProjects   Project[]     @relation("ProjectOwner")
+  uploadedAssets  Asset[]       @relation("AssetOwner")
+  assetConsents   AssetConsent[]
+  auditLogs       AuditLog[]
+
+  @@map("users")
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner    User          @relation("TeamOwner", fields: [ownerId], references: [id])
+  members  TeamMember[]
+  projects Project[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  role      TeamRole
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_members")
+}
+
+model Project {
+  id           String        @id @default(cuid())
+  teamId       String
+  ownerId      String
+  name         String
+  targetPlatform String
+  aspectRatio  AspectRatio
+  status       ProjectStatus @default(active)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner User  @relation("ProjectOwner", fields: [ownerId], references: [id])
+
+  @@map("projects")
+}

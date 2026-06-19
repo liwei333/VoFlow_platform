@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>本地部署 IP 口播智能体平台 - 高保真原型</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --bg: #070917;
+      --panel: rgba(17, 20, 39, .86);
+      --panel-2: rgba(24, 28, 52, .78);
+      --line: rgba(132, 143, 255, .18);
+      --text: #eef2ff;
+      --muted: #9aa4c7;
+      --blue: #4f7cff;
+      --violet: #b151ff;
+      --cyan: #3ee7ff;
+      --green: #38d996;
+      --orange: #ffb454;
+      --red: #ff637e;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 18% 4%, rgba(120, 76, 255, .32), transparent 26%),
+        radial-gradient(circle at 82% 8%, rgba(41, 218, 255, .18), transparent 25%),
+        radial-gradient(circle at 52% 92%, rgba(177, 81, 255, .16), transparent 30%),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      overflow-x: hidden;
+    }
+
+    .glass {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, .32), inset 0 1px 0 rgba(255, 255, 255, .04);
+      backdrop-filter: blur(18px);
+    }
+
+    .glass-soft {
+      background: var(--panel-2);
+      border: 1px solid rgba(132, 143, 255, .14);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+    }
+
+    .gradient-btn {
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      box-shadow: 0 10px 28px rgba(116, 93, 255, .36);
+    }
+
+    .gradient-border {
+      position: relative;
+      background: linear-gradient(var(--panel), var(--panel)) padding-box,
+                  linear-gradient(135deg, rgba(79, 124, 255, .8), rgba(177, 81, 255, .7), rgba(62, 231, 255, .42)) border-box;
+      border: 1px solid transparent;
+    }
+
+    .input {
+      width: 100%;
+      background: rgba(8, 11, 25, .72);
+      border: 1px solid rgba(139, 150, 255, .18);
+      border-radius: 12px;
+      padding: 10px 12px;
+      color: #eef2ff;
+      outline: none;
+    }
+
+    .input:focus {
+      border-color: rgba(105, 125, 255, .65);
+      box-shadow: 0 0 0 3px rgba(79, 124, 255, .15);
+    }
+
+    .select {
+      background: rgba(8, 11, 25, .72);
+      border: 1px solid rgba(139, 150, 255, .18);
+      color: #eef2ff;
+      border-radius: 12px;
+      padding: 10px 12px;
+      outline: none;
+    }
+
+    .nav-item {
+      color: #aeb7da;
+      border: 1px solid transparent;
+    }
+
+    .nav-item.active {
+      color: white;
+      background: linear-gradient(135deg, rgba(79,124,255,.2), rgba(177,81,255,.22));
+      border-color: rgba(132,143,255,.23);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+
+    .scroll-thin::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    .scroll-thin::-webkit-scrollbar-thumb {
+      background: rgba(145, 153, 255, .24);
+      border-radius: 999px;
+    }
+
+    .wave {
+      height: 72px;
+      background:
+        linear-gradient(90deg, transparent 0 6px, rgba(95, 132, 255, .38) 6px 9px, transparent 9px 16px),
+        linear-gradient(90deg, transparent 0 10px, rgba(196, 91, 255, .38) 10px 14px, transparent 14px 22px);
+      background-size: 30px 100%, 44px 100%;
+      mask-image: linear-gradient(180deg, transparent 4%, black 18%, black 82%, transparent 96%);
+      border-radius: 14px;
+      opacity: .9;
+    }
+
+    .video-grid {
+      background-image:
+        linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+
+    .page {
+      display: none;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    .workflow-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(360px, 1fr));
+      gap: 16px;
+      min-width: 1500px;
+    }
+
+    @media (max-width: 1200px) {
+      .workflow-grid {
+        grid-template-columns: repeat(2, minmax(340px, 1fr));
+        min-width: 760px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="min-h-screen flex">
+    <!-- Left Nav -->
+    <aside class="w-[82px] xl:w-[248px] shrink-0 glass border-r border-white/10 min-h-screen sticky top-0 z-40">
+      <div class="h-16 flex items-center gap-3 px-4 border-b border-white/10">
+        <div class="w-10 h-10 rounded-2xl gradient-btn flex items-center justify-center font-black">IP</div>
+        <div class="hidden xl:block">
+          <div class="text-sm font-bold tracking-wide">VoAgent Local</div>
+          <div class="text-xs text-slate-400">本地 IP 口播智能体</div>
+        </div>
+      </div>
+
+      <nav class="p-3 space-y-2">
+        <button class="nav-item active w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm" data-page="dashboard">
+          <span>▣</span><span class="hidden xl:inline">创作工作台</span>
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm" data-page="extract">
+          <span>⛓</span><span class="hidden xl:inline">爆款提取</span>
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm" data-page="scripts">
+          <span>✎</span><span class="hidden xl:inline">文案库</span>
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm" data-page="voices">
+          <span>◍</span><span class="hidden xl:inline">我的声音</span>
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm" data-page="avatars">
+          <span>◉</span><span class="hidden xl:inline">我的数字人</span>
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm" data-page="tasks">
+          <span>▤</span><span class="hidden xl:inline">视频任务</span>
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm" data-page="publish">
+          <span>⇪</span><span class="hidden xl:inline">发布中心</span>
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm" data-page="assets">
+          <span>▧</span><span class="hidden xl:inline">素材库</span>
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm" data-page="models">
+          <span>⚙</span><span class="hidden xl:inline">本地模型</span>
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm" data-page="settings">
+          <span>◌</span><span class="hidden xl:inline">设置</span>
+        </button>
+      </nav>
+
+      <div class="absolute bottom-4 left-3 right-3 hidden xl:block">
+        <div class="glass-soft rounded-2xl p-3">
+          <div class="text-xs text-slate-400">本地服务模式</div>
+          <div class="mt-2 flex items-center gap-2 text-sm">
+            <span class="status-dot bg-emerald-400"></span>
+            <span>GPU 加速在线</span>
+          </div>
+          <div class="mt-2 text-xs text-slate-500">RTX 4090 · 18.4GB / 24GB</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 min-w-0">
+      <!-- Top Bar -->
+      <header class="h-16 glass border-b border-white/10 sticky top-0 z-30 flex items-center justify-between px-4 lg:px-6">
+        <div class="flex items-center gap-3 min-w-0">
+          <div>
+            <div class="text-sm text-slate-400">当前项目</div>
+            <div class="font-semibold truncate">知识博主 60 秒口播矩阵 / 2026-06 批次</div>
+          </div>
+        </div>
+
+        <div class="hidden md:flex items-center gap-3 flex-1 max-w-xl mx-6">
+          <div class="relative w-full">
+            <input class="input pl-10" placeholder="搜索项目、文案、数字人、发布任务..." />
+            <span class="absolute left-3 top-2.5 text-slate-500">⌕</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <div class="hidden lg:flex glass-soft rounded-2xl p-1">
+            <button class="mode-btn px-4 py-2 rounded-xl text-sm gradient-btn" data-mode="手动">手动</button>
+            <button class="mode-btn px-4 py-2 rounded-xl text-sm text-slate-300" data-mode="自动">自动</button>
+            <button class="mode-btn px-4 py-2 rounded-xl text-sm text-slate-300" data-mode="跑批">跑批</button>
+          </div>
+          <button id="toggleLocal" class="glass-soft rounded-2xl px-3 py-2 text-sm">
+            <span class="status-dot bg-emerald-400 mr-2" id="localDot"></span>
+            <span id="localText">本地模型在线</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="p-4 lg:p-6">
+        <!-- Dashboard -->
+        <div id="dashboard" class="page active">
+          <div class="flex items-end justify-between gap-4 mb-5">
+            <div>
+              <h1 class="text-2xl font-black">工作台首页</h1>
+              <p class="text-slate-400 mt-1">查看本地服务、视频任务、失败重试和最近项目。</p>
+            </div>
+            <button class="gradient-btn rounded-2xl px-5 py-3 font-semibold" data-page-shortcut="workbench">新建口播视频</button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div class="glass rounded-3xl p-5">
+              <div class="text-slate-400 text-sm">运行中任务</div>
+              <div class="text-3xl font-black mt-2">7</div>
+              <div class="mt-3 text-xs text-cyan-300">数字人渲染 3 · 视频合成 2 · 发布 2</div>
+            </div>
+            <div class="glass rounded-3xl p-5">
+              <div class="text-slate-400 text-sm">失败任务</div>
+              <div class="text-3xl font-black mt-2 text-rose-300">2</div>
+              <div class="mt-3 text-xs text-orange-300">TTS_TIMEOUT · PUBLISH_TOKEN_EXPIRED</div>
+            </div>
+            <div class="glass rounded-3xl p-5">
+              <div class="text-slate-400 text-sm">本地模型状态</div>
+              <div class="text-3xl font-black mt-2 text-emerald-300">5 / 5</div>
+              <div class="mt-3 text-xs text-slate-400">LLM / ASR / TTS / Avatar / FFmpeg</div>
+            </div>
+            <div class="glass rounded-3xl p-5">
+              <div class="text-slate-400 text-sm">GPU 使用率</div>
+              <div class="text-3xl font-black mt-2">76%</div>
+              <div class="w-full h-2 bg-white/10 rounded-full mt-4 overflow-hidden">
+                <div class="h-full gradient-btn rounded-full" style="width:76%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
+            <div class="glass rounded-3xl p-5 xl:col-span-2">
+              <div class="flex items-center justify-between mb-4">
+                <h2 class="font-bold">最近项目</h2>
+                <button class="text-sm text-indigo-300">查看全部</button>
+              </div>
+              <div class="space-y-3">
+                <div class="glass-soft rounded-2xl p-4 flex items-center justify-between">
+                  <div>
+                    <div class="font-semibold">AI 工具知识博主 60 秒口播</div>
+                    <div class="text-xs text-slate-400 mt-1">9:16 · 抖音 / 小红书 · 12 条视频</div>
+                  </div>
+                  <span class="text-xs px-3 py-1 rounded-full bg-emerald-400/10 text-emerald-300">生成中</span>
+                </div>
+                <div class="glass-soft rounded-2xl p-4 flex items-center justify-between">
+                  <div>
+                    <div class="font-semibold">企业获客案例拆解</div>
+                    <div class="text-xs text-slate-400 mt-1">16:9 · B站 / YouTube · 4 条视频</div>
+                  </div>
+                  <span class="text-xs px-3 py-1 rounded-full bg-blue-400/10 text-blue-300">待发布</span>
+                </div>
+                <div class="glass-soft rounded-2xl p-4 flex items-center justify-between">
+                  <div>
+                    <div class="font-semibold">口播爆款结构复刻</div>
+                    <div class="text-xs text-slate-400 mt-1">9:16 · TikTok / Shorts · 9 条视频</div>
+                  </div>
+                  <span class="text-xs px-3 py-1 rounded-full bg-orange-400/10 text-orange-300">待审查</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="glass rounded-3xl p-5">
+              <h2 class="font-bold mb-4">本地健康状态</h2>
+              <div class="space-y-3">
+                <div class="flex items-center justify-between text-sm"><span>Ollama / Qwen2.5</span><span class="text-emerald-300">在线 42ms</span></div>
+                <div class="flex items-center justify-between text-sm"><span>faster-whisper</span><span class="text-emerald-300">在线 116ms</span></div>
+                <div class="flex items-center justify-between text-sm"><span>GPT-SoVITS</span><span class="text-emerald-300">在线 88ms</span></div>
+                <div class="flex items-center justify-between text-sm"><span>MuseTalk</span><span class="text-orange-300">繁忙</span></div>
+                <div class="flex items-center justify-between text-sm"><span>FFmpeg Worker</span><span class="text-emerald-300">在线</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Workbench -->
+        <div id="workbench" class="page">
+          <div class="mb-5 flex items-center justify-between">
+            <div>
+              <h1 class="text-2xl font-black">创作工作台</h1>
+              <p class="text-slate-400 mt-1">从爆款提取、文案改写、法务审查到数字人口播与多平台发布。</p>
+            </div>
+            <div class="hidden lg:flex gap-2">
+              <button class="glass-soft rounded-2xl px-4 py-2 text-sm">保存草稿</button>
+              <button id="runPipeline" class="gradient-btn rounded-2xl px-5 py-2 font-semibold">启动完整流水线</button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto scroll-thin pb-4">
+            <div class="workflow-grid">
+              <!-- Step 1 -->
+              <article class="glass rounded-3xl p-4">
+                <StepHeader class="hidden"></StepHeader>
+                <div class="flex items-center justify-between mb-4">
+                  <div>
+                    <div class="text-xs text-indigo-300">STEP 1</div>
+                    <h2 class="font-bold text-lg">提取文案</h2>
+                  </div>
+                  <span class="text-xs px-3 py-1 rounded-full bg-emerald-400/10 text-emerald-300">ASR 就绪</span>
+                </div>
+
+                <label class="text-xs text-slate-400">爆款视频链接</label>
+                <div class="flex gap-2 mt-2">
+                  <input class="input" value="https://v.douyin.com/iq-agent-demo/" />
+                  <button class="gradient-btn rounded-xl px-4 text-sm whitespace-nowrap">提取</button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 mt-3">
+                  <button class="glass-soft rounded-xl p-3 text-sm">上传视频/音频</button>
+                  <button class="glass-soft rounded-xl p-3 text-sm">导入素材</button>
+                </div>
+
+                <label class="text-xs text-slate-400 block mt-4">原始文案</label>
+                <textarea id="rawScript" class="input mt-2 h-44 resize-none scroll-thin">不是我厉害，是这个本地部署的口播智能体真的把短视频流程打通了。从爆款提取、文案改写、声音生成、数字人出镜，到字幕封面和多平台发布，全流程都可以在本地完成。</textarea>
+
+                <div class="mt-4 grid grid-cols-3 gap-2 text-xs">
+                  <div class="glass-soft rounded-xl p-3"><div class="text-slate-500">来源平台</div><div class="mt-1">抖音</div></div>
+                  <div class="glass-soft rounded-xl p-3"><div class="text-slate-500">视频时长</div><div class="mt-1">00:58</div></div>
+                  <div class="glass-soft rounded-xl p-3"><div class="text-slate-500">转写时间</div><div class="mt-1">12.6s</div></div>
+                </div>
+              </article>
+
+              <!-- Step 2 -->
+              <article class="glass rounded-3xl p-4">
+                <div class="flex items-center justify-between mb-4">
+                  <div>
+                    <div class="text-xs text-indigo-300">STEP 2</div>
+                    <h2 class="font-bold text-lg">改写文案</h2>
+                  </div>
+                  <span id="rewriteStatus" class="text-xs px-3 py-1 rounded-full bg-blue-400/10 text-blue-300">待生成</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-xs text-slate-400">文案风格</label>
+                    <select class="select w-full mt-2">
+                      <option>科普</option><option>测评</option><option>种草</option><option>观点</option><option>情绪共鸣</option><option>直播切片</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-400">目标时长</label>
+                    <select class="select w-full mt-2">
+                      <option>60 秒</option><option>15 秒</option><option>30 秒</option><option>90 秒</option><option>3 分钟</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-400">改写强度</label>
+                    <select class="select w-full mt-2">
+                      <option>中度</option><option>轻度</option><option>强力</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-400">本地模型</label>
+                    <select class="select w-full mt-2">
+                      <option>qwen2.5:14b</option><option>deepseek-r1:14b</option><option>llama3.1:8b</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="flex gap-2 mt-4">
+                  <button id="rewriteBtn" class="gradient-btn rounded-xl px-4 py-2 text-sm flex-1">本地大模型改写</button>
+                  <button class="glass-soft rounded-xl px-4 py-2 text-sm">生成 5 版</button>
+                </div>
+
+                <div class="mt-4 space-y-3" id="candidates">
+                  <div class="gradient-border rounded-2xl p-3">
+                    <div class="flex justify-between">
+                      <b>版本 A · 知识博主风</b>
+                      <span class="text-xs text-emerald-300">已选择</span>
+                    </div>
+                    <p class="text-sm text-slate-300 mt-2">如果你每天都在做口播视频，但还在多个工具之间来回切换，这套本地 IP 口播智能体会帮你把流程压缩到一条流水线。</p>
+                    <div class="flex gap-2 mt-3 text-xs">
+                      <span class="bg-white/10 rounded-full px-2 py-1">212 字</span>
+                      <span class="bg-white/10 rounded-full px-2 py-1">预计 56s</span>
+                      <span class="bg-white/10 rounded-full px-2 py-1">相似度 38%</span>
+                      <span class="bg-orange-400/10 text-orange-300 rounded-full px-2 py-1">风险 2</span>
+                    </div>
+                  </div>
+                  <div class="glass-soft rounded-2xl p-3">
+                    <div class="flex justify-between"><b>版本 B · 观点风</b><button class="text-xs text-indigo-300">选择</button></div>
+                    <p class="text-sm text-slate-400 mt-2">真正适合个人 IP 的工具，不是帮你生成一段文案，而是帮你稳定复制一条内容生产线。</p>
+                  </div>
+                </div>
+              </article>
+
+              <!-- Step 3 -->
+              <article class="glass rounded-3xl p-4">
+                <div class="flex items-center justify-between mb-4">
+                  <div>
+                    <div class="text-xs text-indigo-300">STEP 3</div>
+                    <h2 class="font-bold text-lg">AI 法务审查</h2>
+                  </div>
+                  <span id="legalStatus" class="text-xs px-3 py-1 rounded-full bg-orange-400/10 text-orange-300">待确认</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                  <Risk name="违禁词" count="0" color="emerald"></Risk>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                  <div class="glass-soft rounded-2xl p-3"><div class="text-slate-400">违禁词</div><div class="text-emerald-300 mt-1">0 项</div></div>
+                  <div class="glass-soft rounded-2xl p-3"><div class="text-slate-400">敏感词</div><div class="text-orange-300 mt-1">1 项</div></div>
+                  <div class="glass-soft rounded-2xl p-3"><div class="text-slate-400">夸大宣传</div><div class="text-rose-300 mt-1">1 项</div></div>
+                  <div class="glass-soft rounded-2xl p-3"><div class="text-slate-400">版权风险</div><div class="text-emerald-300 mt-1">0 项</div></div>
+                  <div class="glass-soft rounded-2xl p-3"><div class="text-slate-400">事实风险</div><div class="text-orange-300 mt-1">1 项</div></div>
+                  <div class="glass-soft rounded-2xl p-3"><div class="text-slate-400">平台规则</div><div class="text-emerald-300 mt-1">通过</div></div>
+                </div>
+
+                <div class="mt-4 space-y-3">
+                  <div class="border border-orange-400/20 bg-orange-400/5 rounded-2xl p-3">
+                    <div class="text-sm font-semibold text-orange-200">原句：把播放量提升 10 倍</div>
+                    <div class="text-xs text-slate-400 mt-1">风险原因：疑似夸大效果承诺，缺少条件说明。</div>
+                    <div class="text-xs text-emerald-300 mt-2">建议：帮助你更稳定地提升内容生产效率。</div>
+                  </div>
+                  <div class="border border-rose-400/20 bg-rose-400/5 rounded-2xl p-3">
+                    <div class="text-sm font-semibold text-rose-200">原句：一定能变现</div>
+                    <div class="text-xs text-slate-400 mt-1">风险原因：绝对化收益承诺。</div>
+                    <div class="text-xs text-emerald-300 mt-2">建议：有机会降低试错成本。</div>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 mt-4">
+                  <button id="replaceRisk" class="gradient-btn rounded-xl py-2 text-sm">一键替换</button>
+                  <button class="glass-soft rounded-xl py-2 text-sm">逐条确认</button>
+                  <button class="glass-soft rounded-xl py-2 text-sm">忽略并记录</button>
+                </div>
+              </article>
+
+              <!-- Step 4 -->
+              <article class="glass rounded-3xl p-4">
+                <div class="flex items-center justify-between mb-4">
+                  <div>
+                    <div class="text-xs text-indigo-300">STEP 4</div>
+                    <h2 class="font-bold text-lg">声音生成</h2>
+                  </div>
+                  <span id="ttsStatus" class="text-xs px-3 py-1 rounded-full bg-blue-400/10 text-blue-300">待生成</span>
+                </div>
+
+                <div class="glass-soft rounded-2xl p-1 grid grid-cols-2">
+                  <button class="gradient-btn rounded-xl py-2 text-sm">预置音色</button>
+                  <button class="rounded-xl py-2 text-sm text-slate-300">我的声音克隆</button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 mt-4">
+                  <button class="gradient-border rounded-2xl p-3 text-left text-sm">专业男声<div class="text-xs text-slate-500 mt-1">沉稳 / 知识类</div></button>
+                  <button class="glass-soft rounded-2xl p-3 text-left text-sm">亲和女声<div class="text-xs text-slate-500 mt-1">种草 / 生活</div></button>
+                  <button class="glass-soft rounded-2xl p-3 text-left text-sm">知识博主<div class="text-xs text-slate-500 mt-1">清晰 / 有节奏</div></button>
+                  <button class="glass-soft rounded-2xl p-3 text-left text-sm">新闻解说<div class="text-xs text-slate-500 mt-1">正式 / 权威</div></button>
+                </div>
+
+                <div class="mt-4 grid grid-cols-2 gap-3 text-xs">
+                  <label>语速 <input type="range" class="w-full" value="62"></label>
+                  <label>音调 <input type="range" class="w-full" value="48"></label>
+                  <label>停顿 <input type="range" class="w-full" value="55"></label>
+                  <label>情绪 <input type="range" class="w-full" value="70"></label>
+                </div>
+
+                <div class="mt-4 glass-soft rounded-2xl p-3">
+                  <div class="text-xs text-slate-400 mb-2">声音克隆区</div>
+                  <div class="flex items-center justify-between text-sm">
+                    <span>voice_sample_2026.wav</span>
+                    <span class="text-emerald-300">授权已确认</span>
+                  </div>
+                  <div class="mt-2 text-xs text-slate-500">训练状态：ready · 最近训练 18 分钟前</div>
+                </div>
+
+                <div class="wave mt-4"></div>
+
+                <div class="grid grid-cols-3 gap-2 mt-4">
+                  <button id="ttsBtn" class="gradient-btn rounded-xl py-2 text-sm">生成语音</button>
+                  <button class="glass-soft rounded-xl py-2 text-sm">试听</button>
+                  <button class="glass-soft rounded-xl py-2 text-sm">重新生成</button>
+                </div>
+              </article>
+
+              <!-- Step 5 -->
+              <article class="glass rounded-3xl p-4">
+                <div class="flex items-center justify-between mb-4">
+                  <div>
+                    <div class="text-xs text-indigo-300">STEP 5</div>
+                    <h2 class="font-bold text-lg">数字人生成</h2>
+                  </div>
+                  <span id="avatarStatus" class="text-xs px-3 py-1 rounded-full bg-blue-400/10 text-blue-300">待渲染</span>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 text-xs">
+                  <button class="glass-soft rounded-xl py-2">预置数字人</button>
+                  <button class="gradient-btn rounded-xl py-2">我的数字人</button>
+                  <button class="glass-soft rounded-xl py-2">上传照片</button>
+                </div>
+
+                <div class="mt-4 gradient-border rounded-3xl p-4">
+                  <div class="flex gap-4">
+                    <div class="w-24 h-24 rounded-3xl bg-gradient-to-br from-indigo-500/40 to-fuchsia-500/30 flex items-center justify-center text-4xl">人</div>
+                    <div class="flex-1">
+                      <div class="font-semibold">我的数字人 · Leo</div>
+                      <div class="text-xs text-slate-400 mt-1">半身口播 · 授权已确认 · 可商用内部账号</div>
+                      <div class="mt-3 grid grid-cols-3 gap-2 text-xs">
+                        <span class="bg-emerald-400/10 text-emerald-300 rounded-full px-2 py-1">单人正脸</span>
+                        <span class="bg-emerald-400/10 text-emerald-300 rounded-full px-2 py-1">清晰度 92</span>
+                        <span class="bg-emerald-400/10 text-emerald-300 rounded-full px-2 py-1">光线通过</span>
+                        <span class="bg-emerald-400/10 text-emerald-300 rounded-full px-2 py-1">无遮挡</span>
+                        <span class="bg-orange-400/10 text-orange-300 rounded-full px-2 py-1">角度 8°</span>
+                        <span class="bg-emerald-400/10 text-emerald-300 rounded-full px-2 py-1">1080px</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 mt-4">
+                  <div>
+                    <label class="text-xs text-slate-400">形象比例</label>
+                    <select class="select w-full mt-2"><option>半身</option><option>头像</option></select>
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-400">画布比例</label>
+                    <select class="select w-full mt-2"><option>9:16</option><option>16:9</option><option>1:1</option></select>
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-400">背景</label>
+                    <select class="select w-full mt-2"><option>背景透明</option><option>背景图</option><option>背景视频</option></select>
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-400">模式</label>
+                    <select class="select w-full mt-2"><option>低清预览</option><option>高清生成</option></select>
+                  </div>
+                </div>
+
+                <div class="mt-4 glass-soft rounded-2xl p-3">
+                  <div class="text-xs text-slate-400">照片创建流程</div>
+                  <div class="mt-3 space-y-2 text-sm">
+                    <div class="flex justify-between"><span>1. 上传本人正脸照片</span><span class="text-emerald-300">完成</span></div>
+                    <div class="flex justify-between"><span>2. 照片质量检测</span><span class="text-emerald-300">通过</span></div>
+                    <div class="flex justify-between"><span>3. 肖像授权确认</span><span class="text-emerald-300">已确认</span></div>
+                    <div class="flex justify-between"><span>4. 数字人预览</span><span class="text-blue-300">可生成</span></div>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 mt-4">
+                  <button id="avatarPreviewBtn" class="glass-soft rounded-xl py-2 text-sm">生成低清预览</button>
+                  <button id="avatarHdBtn" class="gradient-btn rounded-xl py-2 text-sm">确认并生成高清</button>
+                </div>
+              </article>
+
+              <!-- Step 6 -->
+              <article class="glass rounded-3xl p-4">
+                <div class="flex items-center justify-between mb-4">
+                  <div>
+                    <div class="text-xs text-indigo-300">STEP 6</div>
+                    <h2 class="font-bold text-lg">视频剪辑</h2>
+                  </div>
+                  <span id="composeStatus" class="text-xs px-3 py-1 rounded-full bg-blue-400/10 text-blue-300">待合成</span>
+                </div>
+
+                <div class="video-grid h-64 rounded-3xl border border-indigo-300/20 bg-black/30 flex items-center justify-center relative overflow-hidden">
+                  <div class="absolute inset-8 rounded-[28px] border border-white/10"></div>
+                  <div class="w-28 h-40 rounded-3xl bg-gradient-to-b from-indigo-400/50 to-fuchsia-500/20 flex items-center justify-center text-5xl">人</div>
+                  <div class="absolute bottom-5 left-6 right-6 bg-black/50 rounded-xl p-2 text-center text-sm">字幕预览：本地 IP 口播智能体正在生成视频...</div>
+                  <div id="renderBadge" class="hidden absolute top-4 right-4 text-xs bg-orange-400/20 text-orange-200 rounded-full px-3 py-1">视频合成中 62%</div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 mt-4">
+                  <label class="glass-soft rounded-xl p-3 text-sm"><input type="checkbox" checked> 字幕开启</label>
+                  <label class="glass-soft rounded-xl p-3 text-sm"><input type="checkbox" checked> 关键词高亮</label>
+                  <label class="glass-soft rounded-xl p-3 text-sm"><input type="checkbox" checked> BGM 自动闪避</label>
+                  <label class="glass-soft rounded-xl p-3 text-sm"><input type="checkbox"> 开启画中画</label>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 mt-4 text-xs">
+                  <label>人声音量 <input type="range" class="w-full" value="82"></label>
+                  <label>BGM 音量 <input type="range" class="w-full" value="28"></label>
+                  <label>画中画大小 <input type="range" class="w-full" value="35"></label>
+                  <label>转场强度 <input type="range" class="w-full" value="18"></label>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 mt-4">
+                  <button class="glass-soft rounded-xl py-2 text-sm">剪辑预览</button>
+                  <button id="composeBtn" class="gradient-btn rounded-xl py-2 text-sm">生成成片</button>
+                </div>
+              </article>
+
+              <!-- Step 7 -->
+              <article class="glass rounded-3xl p-4">
+                <div class="flex items-center justify-between mb-4">
+                  <div>
+                    <div class="text-xs text-indigo-300">STEP 7</div>
+                    <h2 class="font-bold text-lg">封面与发布信息</h2>
+                  </div>
+                  <span class="text-xs px-3 py-1 rounded-full bg-emerald-400/10 text-emerald-300">草稿已生成</span>
+                </div>
+
+                <div class="flex gap-2 overflow-x-auto scroll-thin pb-2 text-xs">
+                  <button class="gradient-btn rounded-full px-3 py-2 whitespace-nowrap">抖音</button>
+                  <button class="glass-soft rounded-full px-3 py-2 whitespace-nowrap">快手</button>
+                  <button class="glass-soft rounded-full px-3 py-2 whitespace-nowrap">小红书</button>
+                  <button class="glass-soft rounded-full px-3 py-2 whitespace-nowrap">视频号</button>
+                  <button class="glass-soft rounded-full px-3 py-2 whitespace-nowrap">B站</button>
+                  <button class="glass-soft rounded-full px-3 py-2 whitespace-nowrap">Shorts</button>
+                  <button class="glass-soft rounded-full px-3 py-2 whitespace-nowrap">TikTok</button>
+                </div>
+
+                <label class="text-xs text-slate-400 block mt-3">标题</label>
+                <input class="input mt-2" value="一个人也能搭建的本地 IP 口播智能体" />
+
+                <label class="text-xs text-slate-400 block mt-3">标签 / 话题</label>
+                <div class="flex flex-wrap gap-2 mt-2 text-xs">
+                  <span class="bg-indigo-400/10 text-indigo-200 rounded-full px-3 py-1">#AI口播</span>
+                  <span class="bg-indigo-400/10 text-indigo-200 rounded-full px-3 py-1">#本地部署</span>
+                  <span class="bg-indigo-400/10 text-indigo-200 rounded-full px-3 py-1">#短视频工具</span>
+                  <span class="bg-indigo-400/10 text-indigo-200 rounded-full px-3 py-1">#个人IP</span>
+                </div>
+
+                <label class="text-xs text-slate-400 block mt-3">描述</label>
+                <textarea class="input mt-2 h-24 resize-none">本地模型 + 声音克隆 + 我的数字人 + 自动剪辑，把口播视频生产变成一条可控工作流。</textarea>
+
+                <div class="grid grid-cols-3 gap-2 mt-3 text-xs">
+                  <div class="glass-soft rounded-xl p-3"><div class="text-slate-500">标题限制</div><div>55 / 60</div></div>
+                  <div class="glass-soft rounded-xl p-3"><div class="text-slate-500">标签数量</div><div>4 / 10</div></div>
+                  <div class="glass-soft rounded-xl p-3"><div class="text-slate-500">封面比例</div><div>9:16</div></div>
+                </div>
+
+                <div class="mt-4 h-44 rounded-3xl bg-gradient-to-br from-indigo-600/45 via-slate-900 to-fuchsia-500/30 border border-indigo-300/20 p-4 flex flex-col justify-between">
+                  <div class="text-xs text-cyan-200">封面预览</div>
+                  <div class="font-black text-2xl leading-tight">本地 IP 口播<br/>智能体</div>
+                  <div class="text-xs text-slate-300">自动选帧 · 人像突出 · 标题模板</div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 mt-4">
+                  <button class="glass-soft rounded-xl py-2 text-sm">自动选帧</button>
+                  <button class="gradient-btn rounded-xl py-2 text-sm">重新生成封面</button>
+                </div>
+              </article>
+
+              <!-- Step 8 -->
+              <article class="glass rounded-3xl p-4">
+                <div class="flex items-center justify-between mb-4">
+                  <div>
+                    <div class="text-xs text-indigo-300">STEP 8</div>
+                    <h2 class="font-bold text-lg">发布中心</h2>
+                  </div>
+                  <span id="publishStatus" class="text-xs px-3 py-1 rounded-full bg-blue-400/10 text-blue-300">待发布</span>
+                </div>
+
+                <div class="space-y-3">
+                  <div class="glass-soft rounded-2xl p-3 flex items-center justify-between">
+                    <div><b>抖音</b><div class="text-xs text-slate-500 mt-1">@Leo运营日记 · 已授权</div></div>
+                    <span class="text-xs text-emerald-300">可发布</span>
+                  </div>
+                  <div class="glass-soft rounded-2xl p-3 flex items-center justify-between">
+                    <div><b>小红书</b><div class="text-xs text-slate-500 mt-1">@AI工具箱 · 已授权</div></div>
+                    <span class="text-xs text-emerald-300">可发布</span>
+                  </div>
+                  <div class="glass-soft rounded-2xl p-3 flex items-center justify-between">
+                    <div><b>B站</b><div class="text-xs text-slate-500 mt-1">Token 已过期</div></div>
+                    <button class="text-xs text-orange-300">重新授权</button>
+                  </div>
+                  <div class="glass-soft rounded-2xl p-3 flex items-center justify-between">
+                    <div><b>YouTube Shorts</b><div class="text-xs text-slate-500 mt-1">未连接账号</div></div>
+                    <button class="text-xs text-indigo-300">授权</button>
+                  </div>
+                </div>
+
+                <div class="mt-4 glass-soft rounded-2xl p-3">
+                  <div class="text-xs text-slate-400">发布参数检查</div>
+                  <div class="mt-2 space-y-2 text-sm">
+                    <div class="flex justify-between"><span>视频比例</span><span class="text-emerald-300">通过</span></div>
+                    <div class="flex justify-between"><span>标题长度</span><span class="text-emerald-300">通过</span></div>
+                    <div class="flex justify-between"><span>封面尺寸</span><span class="text-emerald-300">通过</span></div>
+                    <div class="flex justify-between"><span>B站授权</span><span class="text-orange-300">需处理</span></div>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 mt-4">
+                  <button class="glass-soft rounded-xl py-2 text-sm">定时发布</button>
+                  <button class="glass-soft rounded-xl py-2 text-sm">保存草稿</button>
+                  <button class="glass-soft rounded-xl py-2 text-sm">仅导出 MP4</button>
+                  <button id="publishBtn" class="gradient-btn rounded-xl py-2 text-sm">一键发布</button>
+                </div>
+
+                <div id="publishLog" class="mt-4 text-xs text-slate-400">
+                  日志：等待发布指令...
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+
+        <!-- Avatars -->
+        <div id="avatars" class="page">
+          <PageTitle title="我的数字人" desc="管理本人照片创建的 AI 数字人资产、授权状态和使用记录。"></PageTitle>
+          <div class="flex items-center justify-between mb-5">
+            <div>
+              <h1 class="text-2xl font-black">我的数字人</h1>
+              <p class="text-slate-400 mt-1">创建、预览、删除和复用个人形象数字人。</p>
+            </div>
+            <button id="openAvatarModal" class="gradient-btn rounded-2xl px-5 py-3 font-semibold">创建数字人</button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div class="glass rounded-3xl p-4">
+              <div class="h-48 rounded-3xl bg-gradient-to-br from-indigo-500/35 to-fuchsia-500/25 flex items-center justify-center text-6xl">人</div>
+              <div class="mt-4 font-bold">Leo 半身口播</div>
+              <div class="text-xs text-slate-400 mt-1">创建：2026-06-19 · 最近使用：今天</div>
+              <div class="mt-3 flex gap-2 text-xs"><span class="bg-emerald-400/10 text-emerald-300 rounded-full px-2 py-1">授权已确认</span><span class="bg-blue-400/10 text-blue-300 rounded-full px-2 py-1">可复用</span></div>
+              <div class="grid grid-cols-2 gap-2 mt-4"><button class="glass-soft rounded-xl py-2 text-sm">预览</button><button class="glass-soft rounded-xl py-2 text-sm text-rose-300">删除</button></div>
+            </div>
+            <div class="glass rounded-3xl p-4">
+              <div class="h-48 rounded-3xl bg-gradient-to-br from-cyan-500/25 to-indigo-500/25 flex items-center justify-center text-6xl">人</div>
+              <div class="mt-4 font-bold">企业讲师形象</div>
+              <div class="text-xs text-slate-400 mt-1">创建：2026-06-16 · 最近使用：昨天</div>
+              <div class="mt-3 flex gap-2 text-xs"><span class="bg-orange-400/10 text-orange-300 rounded-full px-2 py-1">待人工复核</span></div>
+              <div class="grid grid-cols-2 gap-2 mt-4"><button class="glass-soft rounded-xl py-2 text-sm">预览</button><button class="glass-soft rounded-xl py-2 text-sm text-rose-300">删除</button></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Voices -->
+        <div id="voices" class="page">
+          <div class="flex items-center justify-between mb-5">
+            <div>
+              <h1 class="text-2xl font-black">我的声音</h1>
+              <p class="text-slate-400 mt-1">管理预置音色和授权克隆音色。</p>
+            </div>
+            <button id="trainVoice" class="gradient-btn rounded-2xl px-5 py-3 font-semibold">上传声音样本</button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div class="glass rounded-3xl p-4">
+              <div class="font-bold">专业男声</div>
+              <div class="text-xs text-slate-400 mt-1">预置音色 · 知识讲解</div>
+              <div class="wave mt-4"></div>
+              <div class="mt-4 flex justify-between text-sm"><span class="text-emerald-300">可用</span><button class="text-indigo-300">试听</button></div>
+            </div>
+            <div class="glass rounded-3xl p-4">
+              <div class="font-bold">我的克隆音色 Leo</div>
+              <div class="text-xs text-slate-400 mt-1">授权已确认 · 训练完成</div>
+              <div class="wave mt-4"></div>
+              <div class="mt-4 grid grid-cols-3 gap-2 text-sm"><button class="glass-soft rounded-xl py-2">试听</button><button class="glass-soft rounded-xl py-2">重训</button><button class="glass-soft rounded-xl py-2 text-rose-300">删除</button></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Models -->
+        <div id="models" class="page">
+          <div class="flex items-center justify-between mb-5">
+            <div>
+              <h1 class="text-2xl font-black">本地模型</h1>
+              <p class="text-slate-400 mt-1">监控本地 LLM、ASR、TTS、数字人和 FFmpeg 服务。</p>
+            </div>
+            <button id="healthAll" class="gradient-btn rounded-2xl px-5 py-3 font-semibold">全部健康检查</button>
+          </div>
+
+          <div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+            <div class="model-card glass rounded-3xl p-4" data-name="LLM 服务">
+              <div class="flex justify-between"><b>LLM 服务</b><span class="text-emerald-300 text-sm">在线</span></div>
+              <div class="text-xs text-slate-400 mt-2">http://127.0.0.1:11434/v1</div>
+              <div class="mt-4 text-sm space-y-2">
+                <div>模型：qwen2.5:14b</div><div>延迟：42ms</div><div>GPU：18%</div>
+              </div>
+              <button class="health-btn w-full glass-soft rounded-xl py-2 mt-4 text-sm">健康检查</button>
+            </div>
+            <div class="model-card glass rounded-3xl p-4" data-name="ASR 服务">
+              <div class="flex justify-between"><b>ASR 服务</b><span class="text-emerald-300 text-sm">在线</span></div>
+              <div class="text-xs text-slate-400 mt-2">http://127.0.0.1:8001</div>
+              <div class="mt-4 text-sm space-y-2">
+                <div>模型：faster-whisper-large-v3</div><div>延迟：116ms</div><div>GPU：22%</div>
+              </div>
+              <button class="health-btn w-full glass-soft rounded-xl py-2 mt-4 text-sm">健康检查</button>
+            </div>
+            <div class="model-card glass rounded-3xl p-4" data-name="TTS 服务">
+              <div class="flex justify-between"><b>TTS 服务</b><span class="text-emerald-300 text-sm">在线</span></div>
+              <div class="text-xs text-slate-400 mt-2">http://127.0.0.1:9880</div>
+              <div class="mt-4 text-sm space-y-2">
+                <div>模型：GPT-SoVITS</div><div>延迟：88ms</div><div>GPU：14%</div>
+              </div>
+              <button class="health-btn w-full glass-soft rounded-xl py-2 mt-4 text-sm">健康检查</button>
+            </div>
+            <div class="model-card glass rounded-3xl p-4" data-name="数字人服务">
+              <div class="flex justify-between"><b>数字人服务</b><span class="text-orange-300 text-sm">繁忙</span></div>
+              <div class="text-xs text-slate-400 mt-2">http://127.0.0.1:7860</div>
+              <div class="mt-4 text-sm space-y-2">
+                <div>模型：MuseTalk / SadTalker</div><div>延迟：392ms</div><div>GPU：61%</div>
+              </div>
+              <button class="health-btn w-full glass-soft rounded-xl py-2 mt-4 text-sm">健康检查</button>
+            </div>
+            <div class="model-card glass rounded-3xl p-4" data-name="FFmpeg 服务">
+              <div class="flex justify-between"><b>FFmpeg 服务</b><span class="text-emerald-300 text-sm">在线</span></div>
+              <div class="text-xs text-slate-400 mt-2">local://ffmpeg-worker</div>
+              <div class="mt-4 text-sm space-y-2">
+                <div>版本：6.1</div><div>队列：2</div><div>CPU：37%</div>
+              </div>
+              <button class="health-btn w-full glass-soft rounded-xl py-2 mt-4 text-sm">健康检查</button>
+            </div>
+          </div>
+
+          <div class="glass rounded-3xl p-5 mt-5">
+            <h2 class="font-bold mb-4">环境变量配置示例</h2>
+            <pre class="glass-soft rounded-2xl p-4 text-sm text-cyan-100 overflow-x-auto scroll-thin">LLM_BASE_URL=http://127.0.0.1:11434/v1
+LLM_MODEL=qwen2.5:14b
+ASR_BASE_URL=http://127.0.0.1:8001
+TTS_BASE_URL=http://127.0.0.1:9880
+AVATAR_BASE_URL=http://127.0.0.1:7860
+FFMPEG_WORKER=local://ffmpeg-worker
+GPU_MODE=cuda
+QUEUE_REDIS_URL=redis://127.0.0.1:6379</pre>
+          </div>
+        </div>
+
+        <!-- Tasks -->
+        <div id="tasks" class="page">
+          <div class="flex items-center justify-between mb-5">
+            <div>
+              <h1 class="text-2xl font-black">任务中心</h1>
+              <p class="text-slate-400 mt-1">查看所有视频生成任务、当前节点、失败原因与重试记录。</p>
+            </div>
+            <div class="flex gap-2 text-sm">
+              <button class="glass-soft rounded-xl px-3 py-2">全部</button>
+              <button class="glass-soft rounded-xl px-3 py-2">运行中</button>
+              <button class="glass-soft rounded-xl px-3 py-2">失败</button>
+              <button class="glass-soft rounded-xl px-3 py-2">待确认</button>
+            </div>
+          </div>
+
+          <div class="glass rounded-3xl overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-white/5 text-slate-400">
+                <tr>
+                  <th class="text-left p-4">任务</th>
+                  <th class="text-left p-4">当前节点</th>
+                  <th class="text-left p-4">进度</th>
+                  <th class="text-left p-4">状态</th>
+                  <th class="text-left p-4">失败原因</th>
+                  <th class="text-right p-4">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/10">
+                <tr>
+                  <td class="p-4">IP口播_0620_001</td>
+                  <td class="p-4">数字人渲染</td>
+                  <td class="p-4"><div class="w-40 h-2 bg-white/10 rounded-full"><div class="h-full gradient-btn rounded-full" style="width:68%"></div></div></td>
+                  <td class="p-4 text-blue-300">运行中</td>
+                  <td class="p-4 text-slate-500">-</td>
+                  <td class="p-4 text-right"><button class="text-indigo-300">查看产物</button></td>
+                </tr>
+                <tr>
+                  <td class="p-4">IP口播_0620_002</td>
+                  <td class="p-4">TTS</td>
+                  <td class="p-4"><div class="w-40 h-2 bg-white/10 rounded-full"><div class="h-full bg-rose-400 rounded-full" style="width:35%"></div></div></td>
+                  <td class="p-4 text-rose-300">失败</td>
+                  <td class="p-4 text-orange-300">TTS_TIMEOUT：服务超时</td>
+                  <td class="p-4 text-right"><button class="retry-btn text-indigo-300">重试</button></td>
+                </tr>
+                <tr>
+                  <td class="p-4">IP口播_0619_009</td>
+                  <td class="p-4">法务审查</td>
+                  <td class="p-4"><div class="w-40 h-2 bg-white/10 rounded-full"><div class="h-full bg-orange-400 rounded-full" style="width:45%"></div></div></td>
+                  <td class="p-4 text-orange-300">待确认</td>
+                  <td class="p-4 text-slate-500">夸大宣传 2 项</td>
+                  <td class="p-4 text-right"><button class="text-indigo-300">进入确认</button></td>
+                </tr>
+                <tr>
+                  <td class="p-4">IP口播_0619_006</td>
+                  <td class="p-4">发布</td>
+                  <td class="p-4"><div class="w-40 h-2 bg-white/10 rounded-full"><div class="h-full bg-emerald-400 rounded-full" style="width:100%"></div></div></td>
+                  <td class="p-4 text-emerald-300">成功</td>
+                  <td class="p-4 text-slate-500">-</td>
+                  <td class="p-4 text-right"><button class="text-indigo-300">查看日志</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Placeholder Pages -->
+        <div id="extract" class="page"><Placeholder title="爆款提取" desc="用于导入爆款链接、解析视频结构、提取钩子、节奏和卖点。"></Placeholder></div>
+        <div id="scripts" class="page"><Placeholder title="文案库" desc="管理原文、改写版本、风险记录、品牌语气库和历史版本。"></Placeholder></div>
+        <div id="publish" class="page"><Placeholder title="发布中心" desc="管理多平台账号授权、发布状态、失败重试和日志。"></Placeholder></div>
+        <div id="assets" class="page"><Placeholder title="素材库" desc="管理视频、音频、BGM、字体、封面模板和授权说明。"></Placeholder></div>
+        <div id="settings" class="page"><Placeholder title="设置" desc="管理本地部署路径、队列并发、用户权限、审计日志和安全策略。"></Placeholder></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Avatar Modal -->
+  <div id="avatarModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 p-4">
+    <div class="glass rounded-3xl w-full max-w-3xl p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-xl font-black">创建我的数字人</h2>
+          <p class="text-sm text-slate-400 mt-1">上传本人正脸照片，完成质检与肖像授权后生成数字人资产。</p>
+        </div>
+        <button id="closeAvatarModal" class="glass-soft rounded-xl px-3 py-2">关闭</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+        <div class="h-72 rounded-3xl border border-dashed border-indigo-300/30 bg-white/5 flex flex-col items-center justify-center">
+          <div class="text-5xl">＋</div>
+          <div class="mt-2 font-semibold">上传本人正脸照片</div>
+          <div class="text-xs text-slate-400 mt-1">JPG / PNG / WebP，短边不低于 720px</div>
+        </div>
+        <div class="space-y-3">
+          <div class="glass-soft rounded-2xl p-3 flex justify-between"><span>单人正脸</span><span class="text-emerald-300">通过</span></div>
+          <div class="glass-soft rounded-2xl p-3 flex justify-between"><span>清晰度</span><span class="text-emerald-300">92 / 100</span></div>
+          <div class="glass-soft rounded-2xl p-3 flex justify-between"><span>光线</span><span class="text-emerald-300">均匀</span></div>
+          <div class="glass-soft rounded-2xl p-3 flex justify-between"><span>遮挡</span><span class="text-emerald-300">无遮挡</span></div>
+          <div class="glass-soft rounded-2xl p-3 flex justify-between"><span>人脸角度</span><span class="text-orange-300">轻微偏转 8°</span></div>
+          <label class="glass-soft rounded-2xl p-3 flex gap-3 text-sm">
+            <input type="checkbox" checked>
+            <span>我确认该照片为本人或已获得明确授权，同意用于本地数字人口播生成。</span>
+          </label>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 mt-5">
+        <button class="glass-soft rounded-2xl px-4 py-2">仅保存照片</button>
+        <button class="gradient-btn rounded-2xl px-5 py-2 font-semibold">生成数字人预览</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const pages = document.querySelectorAll(".page");
+    const navItems = document.querySelectorAll(".nav-item");
+
+    function showPage(id) {
+      pages.forEach(p => p.classList.remove("active"));
+      const target = document.getElementById(id);
+      if (target) target.classList.add("active");
+
+      navItems.forEach(n => n.classList.remove("active"));
+      const nav = document.querySelector(`[data-page="${id}"]`);
+      if (nav) nav.classList.add("active");
+    }
+
+    navItems.forEach(item => {
+      item.addEventListener("click", () => {
+        const page = item.dataset.page;
+        if (page === "dashboard") showPage("dashboard");
+        else showPage(page);
+      });
+    });
+
+    document.querySelectorAll("[data-page-shortcut]").forEach(btn => {
+      btn.addEventListener("click", () => showPage(btn.dataset.pageShortcut));
+    });
+
+    document.querySelectorAll(".mode-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".mode-btn").forEach(b => {
+          b.classList.remove("gradient-btn");
+          b.classList.add("text-slate-300");
+        });
+        btn.classList.add("gradient-btn");
+        btn.classList.remove("text-slate-300");
+      });
+    });
+
+    let localOnline = true;
+    document.getElementById("toggleLocal").addEventListener("click", () => {
+      localOnline = !localOnline;
+      const dot = document.getElementById("localDot");
+      const text = document.getElementById("localText");
+      dot.className = "status-dot mr-2 " + (localOnline ? "bg-emerald-400" : "bg-rose-400");
+      text.textContent = localOnline ? "本地模型在线" : "本地模型离线";
+    });
+
+    const setBadge = (id, text, type = "blue") => {
+      const el = document.getElementById(id);
+      const map = {
+        blue: "bg-blue-400/10 text-blue-300",
+        green: "bg-emerald-400/10 text-emerald-300",
+        orange: "bg-orange-400/10 text-orange-300",
+        red: "bg-rose-400/10 text-rose-300"
+      };
+      el.className = "text-xs px-3 py-1 rounded-full " + map[type];
+      el.textContent = text;
+    };
+
+    document.getElementById("rewriteBtn").addEventListener("click", () => {
+      setBadge("rewriteStatus", "生成中...", "orange");
+      setTimeout(() => {
+        setBadge("rewriteStatus", "已生成 5 版", "green");
+        const box = document.getElementById("candidates");
+        box.insertAdjacentHTML("afterbegin", `
+          <div class="border border-cyan-400/25 bg-cyan-400/5 rounded-2xl p-3">
+            <div class="flex justify-between">
+              <b>新版本 · 本地模型生成</b>
+              <button class="text-xs text-cyan-300">选择</button>
+            </div>
+            <p class="text-sm text-slate-300 mt-2">你不需要每天重复剪辑、配音和改字幕，只要把主题或参考视频交给本地口播智能体，它就能按步骤生成一条可审核、可重试、可发布的口播视频。</p>
+            <div class="flex gap-2 mt-3 text-xs">
+              <span class="bg-white/10 rounded-full px-2 py-1">238 字</span>
+              <span class="bg-white/10 rounded-full px-2 py-1">预计 61s</span>
+              <span class="bg-white/10 rounded-full px-2 py-1">相似度 31%</span>
+              <span class="bg-emerald-400/10 text-emerald-300 rounded-full px-2 py-1">风险 0</span>
+            </div>
+          </div>
+        `);
+      }, 900);
+    });
+
+    document.getElementById("replaceRisk").addEventListener("click", () => {
+      setBadge("legalStatus", "审查通过", "green");
+    });
+
+    document.getElementById("ttsBtn").addEventListener("click", () => {
+      setBadge("ttsStatus", "TTS 生成中...", "orange");
+      setTimeout(() => setBadge("ttsStatus", "语音已生成", "green"), 1200);
+    });
+
+    document.getElementById("avatarPreviewBtn").addEventListener("click", () => {
+      setBadge("avatarStatus", "低清预览生成中", "orange");
+      setTimeout(() => setBadge("avatarStatus", "预览已完成", "green"), 1300);
+    });
+
+    document.getElementById("avatarHdBtn").addEventListener("click", () => {
+      setBadge("avatarStatus", "高清渲染中", "orange");
+      setTimeout(() => setBadge("avatarStatus", "高清完成", "green"), 1800);
+    });
+
+    document.getElementById("composeBtn").addEventListener("click", () => {
+      setBadge("composeStatus", "视频合成中", "orange");
+      document.getElementById("renderBadge").classList.remove("hidden");
+      setTimeout(() => {
+        setBadge("composeStatus", "成片已生成", "green");
+        document.getElementById("renderBadge").textContent = "视频合成完成";
+        document.getElementById("renderBadge").className = "absolute top-4 right-4 text-xs bg-emerald-400/20 text-emerald-200 rounded-full px-3 py-1";
+      }, 1600);
+    });
+
+    document.getElementById("publishBtn").addEventListener("click", () => {
+      setBadge("publishStatus", "发布中...", "orange");
+      document.getElementById("publishLog").textContent = "日志：正在发布到抖音、小红书；B站授权过期，已跳过。";
+      setTimeout(() => {
+        setBadge("publishStatus", "部分成功", "orange");
+        document.getElementById("publishLog").textContent = "日志：抖音发布成功，小红书发布成功，B站失败：TOKEN_EXPIRED，可重试。";
+      }, 1500);
+    });
+
+    document.getElementById("runPipeline").addEventListener("click", () => {
+      setBadge("rewriteStatus", "生成中...", "orange");
+      setBadge("legalStatus", "审查中...", "orange");
+      setBadge("ttsStatus", "排队中", "blue");
+      setBadge("avatarStatus", "等待音频", "blue");
+      setBadge("composeStatus", "等待数字人", "blue");
+      setTimeout(() => setBadge("rewriteStatus", "已生成", "green"), 700);
+      setTimeout(() => setBadge("legalStatus", "待确认", "orange"), 1000);
+      setTimeout(() => setBadge("ttsStatus", "语音已生成", "green"), 1600);
+      setTimeout(() => setBadge("avatarStatus", "数字人渲染中", "orange"), 2200);
+      setTimeout(() => setBadge("avatarStatus", "数字人完成", "green"), 3200);
+      setTimeout(() => {
+        setBadge("composeStatus", "视频合成中", "orange");
+        document.getElementById("renderBadge").classList.remove("hidden");
+      }, 3500);
+      setTimeout(() => setBadge("composeStatus", "成片已生成", "green"), 4800);
+    });
+
+    document.querySelectorAll(".health-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const old = btn.textContent;
+        btn.textContent = "检查中...";
+        setTimeout(() => {
+          btn.textContent = "健康 · 在线";
+          btn.classList.add("text-emerald-300");
+        }, 700);
+      });
+    });
+
+    document.getElementById("healthAll").addEventListener("click", () => {
+      document.querySelectorAll(".health-btn").forEach(btn => btn.click());
+    });
+
+    document.querySelectorAll(".retry-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        btn.textContent = "重试中...";
+        setTimeout(() => {
+          btn.textContent = "已重新入队";
+          btn.classList.add("text-emerald-300");
+        }, 800);
+      });
+    });
+
+    const avatarModal = document.getElementById("avatarModal");
+    document.getElementById("openAvatarModal").addEventListener("click", () => {
+      avatarModal.classList.remove("hidden");
+      avatarModal.classList.add("flex");
+    });
+    document.getElementById("closeAvatarModal").addEventListener("click", () => {
+      avatarModal.classList.add("hidden");
+      avatarModal.classList.remove("flex");
+    });
+
+    document.getElementById("trainVoice").addEventListener("click", () => {
+      alert("声音样本上传流程：上传音频 → 授权确认 → 本地训练 → 试听确认。");
+    });
+
+    class Placeholder extends HTMLElement {
+      connectedCallback() {
+        const title = this.getAttribute("title");
+        const desc = this.getAttribute("desc");
+        this.innerHTML = `
+          <div class="glass rounded-3xl p-10">
+            <div class="text-2xl font-black">${title}</div>
+            <p class="text-slate-400 mt-2">${desc}</p>
+            <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="glass-soft rounded-3xl p-5"><b>数据列表</b><p class="text-sm text-slate-400 mt-2">这里展示真实业务数据、状态、来源和操作按钮。</p></div>
+              <div class="glass-soft rounded-3xl p-5"><b>筛选与搜索</b><p class="text-sm text-slate-400 mt-2">支持按状态、平台、时间、授权状态筛选。</p></div>
+              <div class="glass-soft rounded-3xl p-5"><b>操作记录</b><p class="text-sm text-slate-400 mt-2">保留审计日志、失败原因和重试记录。</p></div>
+            </div>
+          </div>
+        `;
+      }
+    }
+    customElements.define("placeholder-view", Placeholder);
+
+    document.querySelectorAll("Placeholder").forEach(el => {
+      const view = document.createElement("placeholder-view");
+      view.setAttribute("title", el.getAttribute("title"));
+      view.setAttribute("desc", el.getAttribute("desc"));
+      el.replaceWith(view);
+    });
+
+    showPage("workbench");
+  </script>
+</body>
+</html>
