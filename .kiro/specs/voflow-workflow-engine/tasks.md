@@ -60,51 +60,51 @@
   - 只返回当前 team 范围内任务
   - _Requirements: US-2_
 
-- [ ] 9. 实现节点重试 API
+- [x] 9. 实现节点重试 API
   - 校验节点失败且 retryable
   - 复制输入并创建新版本
   - 将该节点及下游节点置为 pending
   - _Requirements: US-3_
 
-- [ ] 10. 实现节点确认 API
+- [x] 10. 实现节点确认 API
   - 校验节点状态为 waiting_approval
   - 写入 approved 状态和确认人
   - 推进下一个节点
   - _Requirements: US-4_
 
-- [ ] 11. 实现任务取消 API
+- [x] 11. 实现任务取消 API
   - 未完成节点置为 cancelled
   - 尝试取消队列任务
   - 已完成产物保留
   - _Requirements: US-2_
 
-- [ ] 12. 实现 Worker 执行框架
+- [x] 12. 实现 Worker 执行框架
   - 拉取节点 payload
   - 调用 node handler
   - 捕获异常并写 error_json
   - 支持 mock handler 便于前端联调
   - _Requirements: US-1, US-2_
 
-- [ ] 13. 实现 artifacts 写入服务
+- [x] 13. 实现 artifacts 写入服务
   - 保存 artifact type、storage_url、metadata_json
   - 绑定 job_id 和 node_id
   - 保证同一节点多版本产物可追溯
   - _Requirements: US-2, US-3_
 
-- [ ] 14. 实现任务中心 UI
+- [x] 14. 实现任务中心 UI
   - 展示任务列表
   - 展示节点进度条
   - 展示失败原因和重试按钮
   - 展示等待确认按钮
   - _Requirements: US-2, US-3, US-4_
 
-- [ ] 15. 添加状态机单元测试
+- [x] 15. 添加状态机单元测试
   - 测试合法状态流转
   - 测试非法状态流转被拒绝
   - 测试失败节点重试版本递增
   - _Requirements: US-2, US-3, US-4_
 
-- [ ] 16. Checkpoint: 工作流验收
+- [x] 16. Checkpoint: 工作流验收
   - 创建视频任务后生成默认节点
   - mock Worker 能推进任务到 waiting_approval
   - 失败节点可重试且保留旧版本

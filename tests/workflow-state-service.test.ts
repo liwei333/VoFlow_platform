@@ -72,7 +72,31 @@ describe("workflow node status state machine", () => {
     ).toBe(true);
   });
 
-  it("rejects transitions outside Phase 5 and approval bypasses", () => {
+  it("allows retry, approval, and cancellation transitions from later phases", () => {
+    expect(
+      isWorkflowNodeStatusTransitionAllowed({
+        from: WORKFLOW_NODE_STATUS.FAILED,
+        to: WORKFLOW_NODE_STATUS.QUEUED,
+        requiresApproval: false,
+      })
+    ).toBe(true);
+    expect(
+      isWorkflowNodeStatusTransitionAllowed({
+        from: WORKFLOW_NODE_STATUS.WAITING_APPROVAL,
+        to: WORKFLOW_NODE_STATUS.APPROVED,
+        requiresApproval: true,
+      })
+    ).toBe(true);
+    expect(
+      isWorkflowNodeStatusTransitionAllowed({
+        from: WORKFLOW_NODE_STATUS.RUNNING,
+        to: WORKFLOW_NODE_STATUS.CANCELLED,
+        requiresApproval: false,
+      })
+    ).toBe(true);
+  });
+
+  it("rejects invalid transitions and approval bypasses", () => {
     expect(
       isWorkflowNodeStatusTransitionAllowed({
         from: WORKFLOW_NODE_STATUS.PENDING,
@@ -89,8 +113,8 @@ describe("workflow node status state machine", () => {
     ).toBe(false);
     expect(
       isWorkflowNodeStatusTransitionAllowed({
-        from: WORKFLOW_NODE_STATUS.FAILED,
-        to: WORKFLOW_NODE_STATUS.QUEUED,
+        from: WORKFLOW_NODE_STATUS.APPROVED,
+        to: WORKFLOW_NODE_STATUS.RUNNING,
         requiresApproval: false,
       })
     ).toBe(false);

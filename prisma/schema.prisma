@@ -242,6 +242,8 @@ model WorkflowNode {
   error            Json?
   retryCount       Int                @default(0)
   requiresApproval Boolean            @default(false)
+  approvedByUserId String?
+  approvedAt       DateTime?
   startedAt        DateTime?
   finishedAt       DateTime?
   createdAt        DateTime           @default(now())
@@ -253,6 +255,7 @@ model WorkflowNode {
   @@index([jobId])
   @@index([jobId, nodeType])
   @@index([status])
+  @@index([approvedByUserId])
   @@map("workflow_nodes")
 }
 
