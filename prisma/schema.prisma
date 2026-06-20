@@ -76,6 +76,21 @@ enum WorkflowNodeStatus {
   cancelled
 }
 
+enum LocalModelServiceType {
+  llm
+  asr
+  tts
+  avatar
+  ffmpeg
+}
+
+enum LocalModelServiceStatus {
+  online
+  offline
+  busy
+  misconfigured
+}
+
 model Asset {
   id            String        @id @default(cuid())
   teamId        String
@@ -274,4 +289,22 @@ model Artifact {
   @@index([jobId])
   @@index([nodeId])
   @@map("artifacts")
+}
+
+model LocalModelService {
+  id          String                  @id @default(cuid())
+  serviceType LocalModelServiceType   @unique
+  name        String
+  baseUrl     String?
+  modelName   String?
+  status      LocalModelServiceStatus @default(misconfigured)
+  latencyMs   Int?
+  resource    Json?
+  lastError   Json?
+  checkedAt   DateTime?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([status])
+  @@map("local_model_services")
 }

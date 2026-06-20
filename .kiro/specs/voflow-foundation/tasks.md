@@ -95,7 +95,7 @@
   - 测试项目比例非法时返回校验错误
   - _Requirements: US-1, US-3, US-4_
 
-- [ ] 16. Checkpoint: 平台底座验收
+- [x] 16. Checkpoint: 平台底座验收
   - 本地启动命令可运行
   - 开发用户可以登录、创建项目、查看项目列表
   - 左侧导航和 Dashboard 与原型页面结构一致
@@ -120,7 +120,7 @@
   - API 层做 Prisma 枚举映射 (`src/lib/aspect-ratio.ts`)
   - 前端项目创建 UI 提交字面值
 
-- [ ] R4. Prisma migration 初始化
+- [x] R4. Prisma migration 初始化
   - `npm run db:migrate` 生成初始迁移
   - README 更新使用 migrate 命令
 

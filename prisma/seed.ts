@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { buildLocalModelServiceConfigs } from "../src/lib/local-model/config";
 
 const prisma = new PrismaClient();
 
@@ -58,9 +59,32 @@ async function main() {
     },
   });
 
+  const localModelServices = buildLocalModelServiceConfigs(process.env);
+  for (const service of localModelServices) {
+    await prisma.localModelService.upsert({
+      where: { serviceType: service.type },
+      update: {
+        name: service.name,
+        baseUrl: service.baseUrl,
+        modelName: service.modelName,
+        status: service.status,
+        lastError: service.lastError,
+      },
+      create: {
+        serviceType: service.type,
+        name: service.name,
+        baseUrl: service.baseUrl,
+        modelName: service.modelName,
+        status: service.status,
+        lastError: service.lastError,
+      },
+    });
+  }
+
   console.log("Seed completed:");
   console.log("- Dev user: dev@voflow.local / dev123456");
   console.log("- Disabled user: disabled@voflow.local / disabled123");
+  console.log("- Local model services:", localModelServices.map((service) => service.type).join(", "));
 }
 
 main()

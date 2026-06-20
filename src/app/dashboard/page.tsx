@@ -197,8 +197,11 @@ export default function DashboardPage() {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ backgroundColor: "rgba(15, 23, 42, 0.16)" }}
+        >
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
             <h3 className="text-lg font-medium text-gray-900 mb-4">创建项目</h3>
             <form onSubmit={handleCreateProject} className="space-y-4">
               <div>

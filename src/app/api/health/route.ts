@@ -1,19 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { redis } from "@/lib/auth";
-
-type ServiceStatus = "online" | "offline" | "unknown";
+import { buildLocalModelServiceConfigs } from "@/lib/local-model/config";
+import { checkLocalModelServices } from "@/lib/local-model/health";
 
 interface DependencyStatus {
   status: "up" | "down";
   latency?: number;
-  error?: string;
-}
-
-interface ModelStatus {
-  configured: boolean;
-  status: ServiceStatus;
-  url?: string;
   error?: string;
 }
 
@@ -55,23 +48,6 @@ async function checkMinIO(): Promise<DependencyStatus> {
   }
 }
 
-async function checkModelService(url: string | undefined): Promise<ModelStatus> {
-  if (!url) {
-    return { configured: false, status: "unknown", error: "未配置" };
-  }
-  try {
-    const response = await fetch(`${url}/health`, {
-      signal: AbortSignal.timeout(3000),
-    });
-    if (response.ok) {
-      return { configured: true, status: "online", url };
-    }
-    return { configured: true, status: "offline", url, error: `HTTP ${response.status}` };
-  } catch (error) {
-    return { configured: true, status: "offline", url, error: String(error) };
-  }
-}
-
 export async function GET() {
   const [postgres, redisStatus, minio] = await Promise.all([
     checkPostgres(),
@@ -79,13 +55,24 @@ export async function GET() {
     checkMinIO(),
   ]);
 
-  // Check model services
-  const [llm, tts, asr, avatar] = await Promise.all([
-    checkModelService(process.env.LLM_BASE_URL),
-    checkModelService(process.env.TTS_BASE_URL),
-    checkModelService(process.env.ASR_BASE_URL),
-    checkModelService(process.env.AVATAR_BASE_URL),
-  ]);
+  const modelServiceConfigs = buildLocalModelServiceConfigs();
+  const modelHealthResults = await checkLocalModelServices(modelServiceConfigs);
+  const models = Object.fromEntries(
+    modelServiceConfigs.map((service) => {
+      const health = modelHealthResults.find((result) => result.type === service.type);
+      return [
+        service.type,
+        {
+          configured: service.status !== "misconfigured",
+          status: health?.status ?? service.status,
+          url: service.baseUrl,
+          modelName: service.modelName,
+          latency: health?.latencyMs,
+          error: health?.errorMessage ?? service.lastError?.errorMessage,
+        },
+      ];
+    })
+  );
 
   const allUp =
     postgres.status === "up" &&
@@ -100,12 +87,7 @@ export async function GET() {
       redis: redisStatus,
       minio,
     },
-    models: {
-      llm,
-      tts,
-      asr,
-      avatar,
-    },
+    models,
   };
 
   return NextResponse.json(response, {
