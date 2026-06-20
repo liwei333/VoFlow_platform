@@ -69,8 +69,8 @@ function getHealthEndpoint(service: LocalModelServiceConfig): string {
 async function runCommand(command: string, args: string[], options?: { signal?: AbortSignal }) {
   const result = await execFileAsync(command, args, options);
   return {
-    stdout: result.stdout,
-    stderr: result.stderr,
+    stdout: String(result.stdout),
+    stderr: result.stderr === undefined ? undefined : String(result.stderr),
   };
 }
 

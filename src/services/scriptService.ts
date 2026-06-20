@@ -1,4 +1,4 @@
-import { AssetType, Prisma } from "@prisma/client";
+import { AssetType, Prisma, ScriptCandidate } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { serializeScript, type SerializedScript } from "@/lib/scripts/serializer";
 import { workflowQueue, type WorkflowQueueEnqueuer } from "@/lib/queue/adapter";
@@ -16,6 +16,43 @@ export interface SavePastedScriptInput {
 
 export type SavePastedScriptResult =
   | { success: true; data: SerializedScript }
+  | { success: false; error: { code: "PROJECT_NOT_FOUND" } };
+
+export interface SerializedScriptCandidate {
+  id: string;
+  scriptId: string;
+  content: string;
+  titleCandidates: unknown;
+  riskReport: unknown;
+  modelName: string | null;
+  prompt: unknown;
+  version: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SerializedAsrSegment {
+  id: string;
+  scriptId: string;
+  startMs: number;
+  endMs: number;
+  text: string;
+  createdAt: string;
+}
+
+export interface SerializedScriptWithCandidates extends SerializedScript {
+  candidates: SerializedScriptCandidate[];
+  asrSegments: SerializedAsrSegment[];
+}
+
+export interface ListProjectScriptsInput {
+  projectId: string;
+  teamId: string;
+}
+
+export type ListProjectScriptsResult =
+  | { success: true; data: { scripts: SerializedScriptWithCandidates[] } }
   | { success: false; error: { code: "PROJECT_NOT_FOUND" } };
 
 export interface CreateAsrTranscriptionTaskInput {
@@ -113,6 +150,62 @@ export async function savePastedScript(input: SavePastedScriptInput): Promise<Sa
   return {
     success: true,
     data: serializeScript(script),
+  };
+}
+
+export async function listProjectScripts(input: ListProjectScriptsInput): Promise<ListProjectScriptsResult> {
+  const project = await prisma.project.findFirst({
+    where: {
+      id: input.projectId,
+      teamId: input.teamId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!project) {
+    return { success: false, error: { code: "PROJECT_NOT_FOUND" } };
+  }
+
+  const scripts = await prisma.script.findMany({
+    where: {
+      projectId: input.projectId,
+    },
+    orderBy: {
+      updatedAt: "desc",
+    },
+    include: {
+      candidates: {
+        orderBy: [
+          { version: "desc" },
+          { createdAt: "desc" },
+        ],
+      },
+      asrSegments: {
+        orderBy: {
+          startMs: "asc",
+        },
+      },
+    },
+  });
+
+  return {
+    success: true,
+    data: {
+      scripts: scripts.map((script) => ({
+        ...serializeScript(script),
+        candidates: script.candidates.map(serializeScriptCandidate),
+        asrSegments: script.asrSegments.map((segment) => ({
+          id: segment.id,
+          scriptId: segment.scriptId,
+          startMs: segment.startMs,
+          endMs: segment.endMs,
+          text: segment.text,
+          createdAt: segment.createdAt.toISOString(),
+        })),
+      })),
+    },
   };
 }
 
@@ -360,4 +453,20 @@ class SaveAsrTranscriptionResultError extends Error {
     this.name = "SaveAsrTranscriptionResultError";
     this.code = code;
   }
+}
+
+function serializeScriptCandidate(candidate: ScriptCandidate): SerializedScriptCandidate {
+  return {
+    id: candidate.id,
+    scriptId: candidate.scriptId,
+    content: candidate.content,
+    titleCandidates: candidate.titleCandidates,
+    riskReport: candidate.riskReport,
+    modelName: candidate.modelName,
+    prompt: candidate.prompt,
+    version: candidate.version,
+    status: candidate.status,
+    createdAt: candidate.createdAt.toISOString(),
+    updatedAt: candidate.updatedAt.toISOString(),
+  };
 }

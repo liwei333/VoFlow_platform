@@ -1,4 +1,4 @@
-import { LocalModelServiceStatus, LocalModelServiceType } from "@prisma/client";
+import { LocalModelServiceStatus } from "@prisma/client";
 import { Readable } from "node:stream";
 import { getObjectByPath } from "@/lib/storage";
 import type { WorkflowNodeHandler } from "@/services/workflowWorkerService";
@@ -16,7 +16,7 @@ export const LOCAL_ASR_UNAVAILABLE = SCRIPT_MODEL_LOCAL_ASR_UNAVAILABLE;
 export const ASR_INVALID_NODE_INPUT = "ASR_INVALID_NODE_INPUT";
 
 export interface AsrServiceRegistryRecord {
-  serviceType: LocalModelServiceType;
+  serviceType: "asr";
   name: string;
   baseUrl: string | null;
   status: LocalModelServiceStatus;
@@ -77,8 +77,8 @@ interface AsrWorkflowNodeInput {
 }
 
 const prismaAsrServiceRegistry: AsrServiceRegistry = {
-  getAsrService() {
-    return prisma.localModelService.findUnique({
+  async getAsrService() {
+    const service = await prisma.localModelService.findUnique({
       where: { serviceType: "asr" },
       select: {
         serviceType: true,
@@ -87,6 +87,15 @@ const prismaAsrServiceRegistry: AsrServiceRegistry = {
         status: true,
       },
     });
+
+    if (!service) return null;
+
+    return {
+      serviceType: "asr",
+      name: service.name,
+      baseUrl: service.baseUrl,
+      status: service.status,
+    };
   },
 };
 

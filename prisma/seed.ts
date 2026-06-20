@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { buildLocalModelServiceConfigs } from "../src/lib/local-model/config";
 
@@ -68,7 +68,7 @@ async function main() {
         baseUrl: service.baseUrl,
         modelName: service.modelName,
         status: service.status,
-        lastError: service.lastError,
+        lastError: toPrismaJson(service.lastError),
       },
       create: {
         serviceType: service.type,
@@ -76,7 +76,7 @@ async function main() {
         baseUrl: service.baseUrl,
         modelName: service.modelName,
         status: service.status,
-        lastError: service.lastError,
+        lastError: toPrismaJson(service.lastError),
       },
     });
   }
@@ -95,3 +95,11 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
+function toPrismaJson(value: unknown): Prisma.InputJsonValue | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  return value as Prisma.InputJsonValue;
+}

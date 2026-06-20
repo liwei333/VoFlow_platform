@@ -59,7 +59,7 @@ describe("calculateWorkflowProgress", () => {
     });
 
     expect(calculateWorkflowProgress(nodes)).toEqual({
-      progress: 15,
+      progress: 14,
       currentNode: "script_rewrite",
       errorCode: null,
       errorMessage: null,
@@ -141,7 +141,7 @@ describe("syncWorkflowJobProgress", () => {
       success: true,
       data: {
         id: "job-1",
-        progress: 15,
+        progress: 14,
         currentNode: "script_rewrite",
         errorCode: null,
         errorMessage: null,
@@ -151,7 +151,7 @@ describe("syncWorkflowJobProgress", () => {
       {
         jobId: "job-1",
         data: {
-          progress: 15,
+          progress: 14,
           currentNode: "script_rewrite",
           errorCode: null,
           errorMessage: null,

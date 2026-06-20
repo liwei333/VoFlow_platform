@@ -26,6 +26,7 @@ describe("executeWorkflowNode", () => {
     expect(handlers.script_prepare).toBeTypeOf("function");
     expect(handlers.script_rewrite).toBeTypeOf("function");
     expect(handlers.script_title).toBeTypeOf("function");
+    expect(handlers.legal_review).toBeTypeOf("function");
   });
 
   it("runs the matching handler and marks the node succeeded with output", async () => {
@@ -134,6 +135,51 @@ describe("executeWorkflowNode", () => {
       },
     });
   });
+
+  it("marks the node waiting approval when the handler reports approval is required", async () => {
+    const calls: unknown[] = [];
+    const repository = createExecutionRepository(calls);
+    const handlers: WorkflowNodeHandlers = {
+      tts: async () => ({
+        status: "waiting_approval",
+        requiresApproval: true,
+        output: {
+          riskReport: {
+            status: "needs_review",
+          },
+        },
+      }),
+    };
+
+    const result = await executeWorkflowNode(payload, {
+      repository,
+      handlers,
+      now: () => new Date("2026-06-20T00:50:00.000Z"),
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: {
+        output: {
+          riskReport: {
+            status: "needs_review",
+          },
+        },
+      },
+    });
+    expect(calls.at(-1)).toEqual({
+      markWaitingApproval: {
+        nodeId: "node-1",
+        output: {
+          riskReport: {
+            status: "needs_review",
+          },
+        },
+        requiresApproval: true,
+        finishedAt: new Date("2026-06-20T00:50:00.000Z"),
+      },
+    });
+  });
 });
 
 describe("writeWorkflowArtifact", () => {
@@ -193,6 +239,9 @@ function createExecutionRepository(calls: unknown[]): WorkflowNodeExecutionRepos
     },
     markSucceeded: async (nodeId, output, finishedAt) => {
       calls.push({ markSucceeded: { nodeId, output, finishedAt } });
+    },
+    markWaitingApproval: async (nodeId, output, requiresApproval, finishedAt) => {
+      calls.push({ markWaitingApproval: { nodeId, output, requiresApproval, finishedAt } });
     },
     markFailed: async (nodeId, error, finishedAt) => {
       calls.push({ markFailed: { nodeId, error, finishedAt } });

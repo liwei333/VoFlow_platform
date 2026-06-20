@@ -84,31 +84,31 @@
   - 使用本地 LLM Provider
   - _Requirements: US-4, US-5_
 
-- [ ] 12. 实现风险检查服务
+- [x] 12. 实现风险检查服务
   - 配置 MVP 敏感词词表
   - 输出 risk_report_json
   - 风险命中时设置 waiting_approval
   - _Requirements: US-4_
 
-- [ ] 13. 实现外部模型调用保护
+- [x] 13. 实现外部模型调用保护
   - 默认配置下禁用 external provider
   - 只有显式设置 `ALLOW_EXTERNAL_LLM=true` 才允许外部 provider
   - 添加测试确保默认不会读取 OpenAI/Claude 密钥
   - _Requirements: US-3, US-5_
 
-- [ ] 14. 实现候选文案确认 API
+- [x] 14. 实现候选文案确认 API
   - 标记 candidate approved
   - 将 approved candidate 绑定到 video_job
   - 风险命中时要求用户确认
   - _Requirements: US-3, US-4_
 
-- [ ] 15. 实现文案编辑 UI
+- [x] 15. 实现文案编辑 UI
   - 粘贴文案
   - 展示字数和预计时长
   - 展示候选文案、标题和风险提示
   - _Requirements: US-1, US-3, US-4_
 
-- [ ] 16. 实现音视频转写 UI
+- [x] 16. 实现音视频转写 UI
   - 选择已上传音视频素材
   - 创建转写任务
   - 展示转写文本和 segments 摘要

@@ -9,7 +9,7 @@ describe("Local OpenAI-compatible LLM provider", () => {
   it("rewrites scripts through the supplied local llm service config", async () => {
     vi.stubEnv("LLM_BASE_URL", "https://api.openai.example");
     vi.stubEnv("LLM_MODEL", "online-model");
-    const fetcher = vi.fn(async () => jsonResponse({
+    const fetcher = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => jsonResponse({
       choices: [
         {
           message: {
@@ -60,7 +60,7 @@ describe("Local OpenAI-compatible LLM provider", () => {
   });
 
   it("generates title candidates with the supplied platform", async () => {
-    const fetcher = vi.fn(async () => jsonResponse({
+    const fetcher = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => jsonResponse({
       choices: [
         {
           message: {
@@ -92,7 +92,7 @@ describe("Local OpenAI-compatible LLM provider", () => {
 
   it("checks local model availability without reading model env values", async () => {
     vi.stubEnv("LLM_MODEL", "online-model");
-    const fetcher = vi.fn(async () => jsonResponse({
+    const fetcher = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => jsonResponse({
       data: [
         { id: "qwen-local" },
       ],

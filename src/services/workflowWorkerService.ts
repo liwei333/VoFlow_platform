@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import type { WorkflowQueuePayload } from "@/lib/queue/adapter";
 import { WORKFLOW_NODE_STATUS } from "@/lib/workflow/status";
 import { createAsrWorkflowNodeHandler } from "@/services/scriptAsrWorkerService";
+import { createRiskWorkflowNodeHandler } from "@/services/scriptRiskWorkerService";
 import { createRewriteWorkflowNodeHandler } from "@/services/scriptRewriteWorkerService";
 import { createTitleWorkflowNodeHandler } from "@/services/scriptTitleWorkerService";
 
@@ -22,6 +23,12 @@ export interface WorkflowNodeExecutionRepository {
   findNodeForExecution(nodeId: string): Promise<WorkflowNodeExecutionRecord | null>;
   markRunning(nodeId: string, startedAt: Date): Promise<void>;
   markSucceeded(nodeId: string, output: unknown, finishedAt: Date): Promise<void>;
+  markWaitingApproval(
+    nodeId: string,
+    output: unknown,
+    requiresApproval: boolean,
+    finishedAt: Date
+  ): Promise<void>;
   markFailed(
     nodeId: string,
     error: WorkflowNodeExecutionError,
@@ -36,6 +43,8 @@ export interface WorkflowNodeHandlerInput {
 
 export interface WorkflowNodeHandlerOutput {
   output?: unknown;
+  status?: typeof WORKFLOW_NODE_STATUS.WAITING_APPROVAL;
+  requiresApproval?: boolean;
 }
 
 export type WorkflowNodeHandler = (
@@ -89,6 +98,19 @@ const prismaWorkflowNodeExecutionRepository: WorkflowNodeExecutionRepository = {
     });
   },
 
+  async markWaitingApproval(nodeId, output, requiresApproval, finishedAt) {
+    await prisma.workflowNode.update({
+      where: { id: nodeId },
+      data: {
+        status: WORKFLOW_NODE_STATUS.WAITING_APPROVAL,
+        requiresApproval,
+        output: toPrismaJson(output),
+        error: Prisma.JsonNull,
+        finishedAt,
+      },
+    });
+  },
+
   async markFailed(nodeId, error, finishedAt) {
     await prisma.workflowNode.update({
       where: { id: nodeId },
@@ -106,6 +128,7 @@ export function createDefaultWorkflowNodeHandlers(): WorkflowNodeHandlers {
     script_prepare: createAsrWorkflowNodeHandler(),
     script_rewrite: createRewriteWorkflowNodeHandler(),
     script_title: createTitleWorkflowNodeHandler(),
+    legal_review: createRiskWorkflowNodeHandler(),
   };
 }
 
@@ -140,6 +163,16 @@ export async function executeWorkflowNode(
   try {
     const result = await handler({ payload, input: node.input });
     const output = result.output ?? {};
+    if (result.status === WORKFLOW_NODE_STATUS.WAITING_APPROVAL) {
+      await repository.markWaitingApproval(
+        payload.nodeId,
+        output,
+        result.requiresApproval ?? true,
+        now()
+      );
+      return { success: true, data: { output } };
+    }
+
     await repository.markSucceeded(payload.nodeId, output, now());
     return { success: true, data: { output } };
   } catch (error) {

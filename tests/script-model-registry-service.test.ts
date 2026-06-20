@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  EXTERNAL_LLM_DISABLED,
   LOCAL_LLM_UNAVAILABLE,
   getScriptAiModelRegistry,
   requireAvailableLlmService,
@@ -71,6 +72,61 @@ describe("script AI model registry", () => {
     });
   });
 
+  it("does not read OpenAI or Claude keys when the provider defaults to local", async () => {
+    const env = createEnvWithForbiddenOnlineKeys();
+
+    await expect(
+      getScriptAiModelRegistry({
+        env,
+        repository: {
+          findScriptModelServices: async () => [],
+        },
+      })
+    ).resolves.toMatchObject({
+      generation: {
+        provider: "local-openai-compatible",
+      },
+    });
+  });
+
+  it("rejects external llm providers unless explicitly enabled", async () => {
+    await expect(
+      getScriptAiModelRegistry({
+        env: {
+          LLM_PROVIDER: "openai",
+          OPENAI_API_KEY: "should-not-be-needed",
+        },
+        repository: {
+          findScriptModelServices: async () => [],
+        },
+      })
+    ).rejects.toMatchObject({
+      code: EXTERNAL_LLM_DISABLED,
+      message: "外部 LLM provider 未启用",
+    });
+  });
+
+  it("allows external llm providers only when ALLOW_EXTERNAL_LLM is true", async () => {
+    await expect(
+      getScriptAiModelRegistry({
+        env: {
+          LLM_PROVIDER: "openai",
+          ALLOW_EXTERNAL_LLM: "true",
+          LLM_MAX_TOKENS: "900",
+        },
+        repository: {
+          findScriptModelServices: async () => [],
+        },
+      })
+    ).resolves.toMatchObject({
+      generation: {
+        provider: "openai",
+        externalProviderAllowed: true,
+        maxTokens: 900,
+      },
+    });
+  });
+
   it("maps unavailable llm registry status to LOCAL_LLM_UNAVAILABLE", () => {
     expect(() =>
       requireAvailableLlmService({
@@ -101,3 +157,20 @@ describe("script AI model registry", () => {
     });
   });
 });
+
+function createEnvWithForbiddenOnlineKeys(): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = {};
+  Object.defineProperties(env, {
+    OPENAI_API_KEY: {
+      get() {
+        throw new Error("OPENAI_API_KEY should not be read by default");
+      },
+    },
+    CLAUDE_API_KEY: {
+      get() {
+        throw new Error("CLAUDE_API_KEY should not be read by default");
+      },
+    },
+  });
+  return env;
+}

@@ -7,6 +7,7 @@ import {
 
 export const LOCAL_LLM_UNAVAILABLE = "LOCAL_LLM_UNAVAILABLE";
 export const LOCAL_ASR_UNAVAILABLE = "LOCAL_ASR_UNAVAILABLE";
+export const EXTERNAL_LLM_DISABLED = "EXTERNAL_LLM_DISABLED";
 
 export type ScriptAiEnv = Record<string, string | undefined>;
 
@@ -26,6 +27,7 @@ export interface ScriptAiAsrService {
 export interface ScriptAiGenerationConfig {
   provider: string;
   maxTokens?: number;
+  externalProviderAllowed?: boolean;
 }
 
 export interface ScriptAiModelRegistry {
@@ -119,13 +121,22 @@ export function requireAvailableAsrService(service: ScriptAiAsrService | null): 
 }
 
 function readGenerationConfig(env: ScriptAiEnv): ScriptAiGenerationConfig {
+  const provider = readEnvString(env, "LLM_PROVIDER") ?? LOCAL_OPENAI_COMPATIBLE_PROVIDER;
   const config: ScriptAiGenerationConfig = {
-    provider: readEnvString(env, "LLM_PROVIDER") ?? LOCAL_OPENAI_COMPATIBLE_PROVIDER,
+    provider,
   };
   const maxTokens = readPositiveInteger(env, "LLM_MAX_TOKENS");
 
   if (maxTokens !== undefined) {
     config.maxTokens = maxTokens;
+  }
+
+  if (provider !== LOCAL_OPENAI_COMPATIBLE_PROVIDER) {
+    if (readEnvString(env, "ALLOW_EXTERNAL_LLM") !== "true") {
+      throw new ScriptModelRegistryError(EXTERNAL_LLM_DISABLED, "外部 LLM provider 未启用");
+    }
+
+    config.externalProviderAllowed = true;
   }
 
   return config;

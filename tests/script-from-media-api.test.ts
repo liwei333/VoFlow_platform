@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { createSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { POST } from "@/app/api/projects/[projectId]/scripts/from-media/route";
@@ -230,7 +231,7 @@ describe("POST /api/projects/[projectId]/scripts/from-media", () => {
     type: "audio" | "video" | "image",
     name: string,
     assetTeamId: string,
-    metadata: Record<string, unknown>,
+    metadata: Prisma.InputJsonObject,
     licenseStatus: "pending" | "approved" = "approved"
   ) {
     return prisma.asset.create({

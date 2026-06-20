@@ -5,24 +5,26 @@
  * 1. reference_extract  - extract reference materials
  * 2. script_prepare     - prepare initial script
  * 3. script_rewrite     - rewrite/polish script
- * 4. legal_review       - legal/compliance review (requires approval)
- * 5. voice_clone        - clone voice model (requires approval)
- * 6. tts                - text-to-speech generation
- * 7. avatar_render      - render avatar video
- * 8. editing_preview    - initial editing/preview (requires approval)
- * 9. subtitle           - add subtitles
- * 10. bgm_mix           - mix background music
- * 11. cover             - generate cover image
- * 12. final_export      - final export
- * 13. publish           - publish (requires approval, not retryable)
+ * 4. script_title       - generate title candidates
+ * 5. legal_review       - legal/compliance review (requires approval)
+ * 6. voice_clone        - clone voice model (requires approval)
+ * 7. tts                - text-to-speech generation
+ * 8. avatar_render      - render avatar video
+ * 9. editing_preview    - initial editing/preview (requires approval)
+ * 10. subtitle          - add subtitles
+ * 11. bgm_mix           - mix background music
+ * 12. cover             - generate cover image
+ * 13. final_export      - final export
+ * 14. publish           - publish (requires approval, not retryable)
  *
- * Sources: .kiro/specs/voflow-workflow-engine/design.md (13 nodes)
+ * Sources: .kiro/specs/voflow-workflow-engine/design.md and voflow-script-ai title generation task
  */
 
 export const WORKFLOW_NODE_TYPES = [
   "reference_extract",
   "script_prepare",
   "script_rewrite",
+  "script_title",
   "legal_review",
   "voice_clone",
   "tts",
@@ -69,72 +71,79 @@ export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDef
     retryable: true,
     progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
+  script_title: {
+    type: "script_title",
+    order: 4,
+    requiresApproval: false,
+    retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
+  },
   legal_review: {
     type: "legal_review",
-    order: 4,
+    order: 5,
     requiresApproval: true,
     retryable: true,
     progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   voice_clone: {
     type: "voice_clone",
-    order: 5,
+    order: 6,
     requiresApproval: true,
     retryable: true,
     progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   tts: {
     type: "tts",
-    order: 6,
+    order: 7,
     requiresApproval: false,
     retryable: true,
     progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   avatar_render: {
     type: "avatar_render",
-    order: 7,
+    order: 8,
     requiresApproval: false,
     retryable: true,
     progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   editing_preview: {
     type: "editing_preview",
-    order: 8,
+    order: 9,
     requiresApproval: true,
     retryable: true,
     progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   subtitle: {
     type: "subtitle",
-    order: 9,
+    order: 10,
     requiresApproval: false,
     retryable: true,
     progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   bgm_mix: {
     type: "bgm_mix",
-    order: 10,
+    order: 11,
     requiresApproval: false,
     retryable: true,
     progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   cover: {
     type: "cover",
-    order: 11,
+    order: 12,
     requiresApproval: false,
     retryable: true,
     progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   final_export: {
     type: "final_export",
-    order: 12,
+    order: 13,
     requiresApproval: false,
     retryable: true,
     progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
   },
   publish: {
     type: "publish",
-    order: 13,
+    order: 14,
     requiresApproval: true,
     retryable: false,
     progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,

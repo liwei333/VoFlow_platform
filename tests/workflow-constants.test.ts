@@ -14,6 +14,7 @@ const EXPECTED_NODE_ORDER = [
   "reference_extract",
   "script_prepare",
   "script_rewrite",
+  "script_title",
   "legal_review",
   "voice_clone",
   "tts",
@@ -27,7 +28,7 @@ const EXPECTED_NODE_ORDER = [
 ];
 
 describe("WORKFLOW_NODE_TYPES", () => {
-  it("should have 13 nodes in correct order", () => {
+  it("should have 14 nodes in correct order", () => {
     expect(WORKFLOW_NODE_TYPES).toEqual(EXPECTED_NODE_ORDER);
   });
 
@@ -58,9 +59,9 @@ describe("WORKFLOW_NODE_DEFINITIONS", () => {
     });
   });
 
-  it("should have orders from 1 to 13 consecutively", () => {
+  it("should have orders from 1 to 14 consecutively", () => {
     const orders = WORKFLOW_NODE_TYPES.map((type) => WORKFLOW_NODE_DEFINITIONS[type].order);
-    expect(orders).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+    expect(orders).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
   });
 
   it("should mark legal_review, voice_clone, editing_preview, publish as requiresApproval: true", () => {
@@ -116,7 +117,7 @@ describe("getWorkflowNodeDefinition", () => {
     const def = getWorkflowNodeDefinition("tts");
     expect(def).toBeDefined();
     expect(def?.type).toBe("tts");
-    expect(def?.order).toBe(6);
+    expect(def?.order).toBe(7);
   });
 
   it("should return undefined for unknown node type", () => {
@@ -135,11 +136,13 @@ describe("getDefaultWorkflowNodes", () => {
   it("should return new node objects to prevent pollution", () => {
     const nodes = getDefaultWorkflowNodes();
     const originalDef = WORKFLOW_NODE_DEFINITIONS.tts;
+    const ttsNode = nodes.find((node) => node.type === "tts");
+    expect(ttsNode).toBeDefined();
+
+    ttsNode!.order = 999;
+    ttsNode!.requiresApproval = true;
     
-    nodes[5].order = 999;
-    nodes[5].requiresApproval = true;
-    
-    expect(WORKFLOW_NODE_DEFINITIONS.tts.order).toBe(6);
+    expect(WORKFLOW_NODE_DEFINITIONS.tts.order).toBe(7);
     expect(WORKFLOW_NODE_DEFINITIONS.tts.requiresApproval).toBe(false);
   });
 
@@ -151,9 +154,9 @@ describe("getDefaultWorkflowNodes", () => {
     expect(nodes2[0].order).toBe(1);
   });
 
-  it("should return all 13 nodes in order", () => {
+  it("should return all 14 nodes in order", () => {
     const nodes = getDefaultWorkflowNodes();
-    expect(nodes.length).toBe(13);
+    expect(nodes.length).toBe(14);
     nodes.forEach((node, index) => {
       expect(node.type).toBe(WORKFLOW_NODE_TYPES[index]);
       expect(node.order).toBe(index + 1);

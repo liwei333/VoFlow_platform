@@ -2,11 +2,40 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/api-auth";
 import { internalError, invalidJsonBody, notFound, success, validationError } from "@/lib/api-response";
-import { savePastedScript, SCRIPT_CONTENT_MAX_LENGTH } from "@/services/scriptService";
+import { listProjectScripts, savePastedScript, SCRIPT_CONTENT_MAX_LENGTH } from "@/services/scriptService";
 
 const saveScriptSchema = z.object({
   content: z.string().transform((value) => value.trim()).pipe(z.string().min(1).max(SCRIPT_CONTENT_MAX_LENGTH)),
 });
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ projectId: string }> }
+) {
+  const auth = await requireAuth(request);
+  if ("error" in auth) {
+    return auth.error;
+  }
+
+  const { session } = auth.context;
+  const { projectId } = await params;
+
+  try {
+    const result = await listProjectScripts({
+      projectId,
+      teamId: session.teamId,
+    });
+
+    if (!result.success) {
+      return notFound("项目不存在");
+    }
+
+    return success(result.data);
+  } catch (error) {
+    console.error("List scripts error:", error);
+    return internalError();
+  }
+}
 
 export async function POST(
   request: NextRequest,

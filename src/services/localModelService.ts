@@ -1,4 +1,4 @@
-import { LocalModelService, LocalModelServiceType } from "@prisma/client";
+import { LocalModelService, LocalModelServiceType, Prisma } from "@prisma/client";
 import {
   buildLocalModelServiceConfigs,
   LocalModelEnv,
@@ -21,7 +21,7 @@ const prismaLocalModelServiceRepository: LocalModelServiceRepository = {
         baseUrl: service.baseUrl,
         modelName: service.modelName,
         status: service.status,
-        lastError: service.lastError ?? undefined,
+        lastError: toPrismaJson(service.lastError),
       },
       create: {
         serviceType: service.type as LocalModelServiceType,
@@ -29,7 +29,7 @@ const prismaLocalModelServiceRepository: LocalModelServiceRepository = {
         baseUrl: service.baseUrl,
         modelName: service.modelName,
         status: service.status,
-        lastError: service.lastError ?? undefined,
+        lastError: toPrismaJson(service.lastError),
       },
     });
   },
@@ -62,7 +62,7 @@ function toHealthConfig(service: LocalModelService): LocalModelServiceConfig {
     status: service.status,
     lastError:
       service.lastError && typeof service.lastError === "object"
-        ? service.lastError as LocalModelServiceConfig["lastError"]
+        ? service.lastError as unknown as LocalModelServiceConfig["lastError"]
         : undefined,
   };
 }
@@ -94,7 +94,7 @@ export async function checkAndUpdateLocalModelService(serviceType: LocalModelSer
       status: result.status,
       latencyMs: result.latencyMs,
       checkedAt: result.checkedAt,
-      lastError: buildLastError(result) ?? undefined,
+      lastError: toPrismaJson(buildLastError(result)),
     },
   });
 }
@@ -105,4 +105,12 @@ export async function checkAndUpdateAllLocalModelServices() {
     services.map((service) => checkAndUpdateLocalModelService(service.serviceType))
   );
   return checked.filter((service): service is LocalModelService => service !== null);
+}
+
+function toPrismaJson(value: unknown): Prisma.InputJsonValue | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  return value as Prisma.InputJsonValue;
 }

@@ -110,7 +110,9 @@ const scriptAiRegistryReader: ScriptAiRegistryReader = {
 };
 
 const localLlmProviderFactory: ScriptLlmProviderFactory = {
-  createProvider: createLocalOpenAiCompatibleLlmProvider,
+  createProvider(service) {
+    return createLocalOpenAiCompatibleLlmProvider({ service });
+  },
 };
 
 const defaultCreateTitleWorkflowNodeHandlerDependencies: CreateTitleWorkflowNodeHandlerDependencies = {
