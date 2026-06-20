@@ -54,7 +54,7 @@
   - 返回 artifacts 摘要
   - _Requirements: US-2_
 
-- [ ] 8. 实现任务列表 API
+- [x] 8. 实现任务列表 API
   - 支持按项目查询
   - 支持按状态过滤
   - 只返回当前 team 范围内任务

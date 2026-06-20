@@ -47,6 +47,20 @@ export interface WorkflowArtifactSummaryRecord {
   createdAt: Date;
 }
 
+export interface WorkflowJobSummaryRecord {
+  id: string;
+  projectId: string;
+  teamId: string;
+  ownerId: string;
+  status: string;
+  currentNode: string | null;
+  progress: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface SerializedWorkflowJobDetail {
   id: string;
   projectId: string;
@@ -91,6 +105,20 @@ export interface SerializedWorkflowArtifactSummary {
   createdAt: string;
 }
 
+export interface SerializedWorkflowJobSummary {
+  id: string;
+  projectId: string;
+  teamId: string;
+  ownerId: string;
+  status: string;
+  currentNode: string | null;
+  progress: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export function serializeWorkflowJobDetail(
   job: WorkflowJobDetailRecord
 ): SerializedWorkflowJobDetail {
@@ -111,6 +139,30 @@ export function serializeWorkflowJobDetail(
     nodes: latestNodes.map(serializeWorkflowNodeDetail),
     artifacts: job.artifacts.map(serializeWorkflowArtifactSummary),
   };
+}
+
+export function serializeWorkflowJobSummary(
+  job: WorkflowJobSummaryRecord
+): SerializedWorkflowJobSummary {
+  return {
+    id: job.id,
+    projectId: job.projectId,
+    teamId: job.teamId,
+    ownerId: job.ownerId,
+    status: job.status,
+    currentNode: job.currentNode,
+    progress: job.progress,
+    errorCode: job.errorCode,
+    errorMessage: job.errorMessage,
+    createdAt: job.createdAt.toISOString(),
+    updatedAt: job.updatedAt.toISOString(),
+  };
+}
+
+export function serializeWorkflowJobSummaries(
+  jobs: WorkflowJobSummaryRecord[]
+): SerializedWorkflowJobSummary[] {
+  return jobs.map(serializeWorkflowJobSummary);
 }
 
 export function selectLatestWorkflowNodes(
