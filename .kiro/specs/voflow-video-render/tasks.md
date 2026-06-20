@@ -5,6 +5,7 @@
 - [ ] 0. 执行后续开发规范检查
   - 先阅读 `docs/03-VoFlow开发执行规范.md`
   - 本 Spec 不得在 Worker、API 或 UI 中散写渲染服务地址、预览/高清分辨率、crop 选项、错误码、状态文案或 artifact 路径
+  - Avatar 服务 baseUrl、服务状态、状态文案和健康检查必须复用 `voflow-local-model-monitor` 的 `avatar` 服务注册表、配置 helper、health adapter 和 API
   - Avatar render provider、输入校验、ffprobe 校验、artifact 写入和 API 响应必须进入公共 helper/service
   - 若发现同类逻辑已经重复两处以上，先抽公共函数或公共常量，再继续业务实现
   - Checkpoint 反馈必须包含硬编码检查、公共函数提取情况和验证命令
@@ -20,6 +21,7 @@
   - `renderAvatarVideo(payload)`
   - 返回视频路径、duration、resolution、model
   - 实现 mock provider 生成可播放测试视频
+  - provider 只消费 `avatar` 服务的 `baseUrl` 和业务渲染参数，不直接读取 `AVATAR_BASE_URL`
   - _Requirements: US-2, US-3_
 
 - [ ] 3. 实现渲染输入校验服务
@@ -61,7 +63,8 @@
   - _Requirements: US-3_
 
 - [ ] 9. 接入真实模型服务配置
-  - 支持 MuseTalk/SadTalker 服务地址配置
+  - 从 `local_model_services` 读取 `avatar` 服务的 `baseUrl` 和 `status`
+  - 不在渲染模块重新读取或定义 `AVATAR_BASE_URL`
   - 实现请求超时和错误码映射
   - 保留 mock provider 作为测试 fallback
   - _Requirements: US-2, US-3_

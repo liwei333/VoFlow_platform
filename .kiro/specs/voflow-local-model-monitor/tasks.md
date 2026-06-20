@@ -46,20 +46,20 @@
   - 单个服务失败不影响其他服务结果
   - _Requirements: US-2_
 
-- [ ] 7. 实现本地模型页面
+- [x] 7. 实现本地模型页面
   - 展示 LLM、ASR、TTS、数字人、FFmpeg 卡片
   - 展示环境变量示例
   - 支持单服务和全部健康检查按钮
   - _Requirements: US-1, US-2, US-3_
 
-- [ ] 8. 添加测试
+- [x] 8. 添加测试
   - 缺失环境变量显示 misconfigured
   - 模拟服务在线返回 online
   - 模拟超时写入错误状态
   - 全部健康检查部分失败仍返回完整结果
   - _Requirements: US-1, US-2, US-3_
 
-- [ ] 9. Checkpoint: 本地模型监控验收
+- [x] 9. Checkpoint: 本地模型监控验收
   - 页面展示五类本地服务
   - 健康检查可更新状态和延迟
   - 环境变量示例与 `.env.example` 一致

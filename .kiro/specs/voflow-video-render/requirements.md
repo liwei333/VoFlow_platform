@@ -25,6 +25,7 @@ As a 内容运营, I want 先生成低清预览, so that 我可以在高清渲�
 1. WHEN 用户请求预览 THEN 系统 SHALL 使用 preview 模式生成低清视频。
 2. WHEN 预览成功 THEN 系统 SHALL 保存 avatar_video artifact。
 3. WHEN 预览成功 THEN 系统 SHALL 将节点置为 waiting_approval。
+4. WHEN avatar_render 节点执行 THEN 系统 SHALL 从 `local_model_services` 中读取 `avatar` 服务的 `baseUrl` 和 `status`。
 
 ### US-3 高清渲染
 
@@ -34,7 +35,7 @@ As a 内容运营, I want 确认预览后生成高清视频, so that 最终导�
 
 1. WHEN 用户确认预览 THEN 系统 SHALL 创建高清渲染任务。
 2. WHEN 高清渲染成功 THEN 系统 SHALL 保存高清 avatar_video artifact。
-3. IF GPU Worker 失败 THEN 系统 SHALL 标记节点失败并允许重试。
+3. IF GPU Worker 或本地 avatar provider 失败 THEN 系统 SHALL 标记节点失败并允许重试。
 
 ### US-4 渲染参数
 

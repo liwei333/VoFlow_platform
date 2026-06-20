@@ -25,8 +25,9 @@ As a 内容运营, I want 把确认后的文案生成语音, so that 后续可�
 1. WHEN 用户提交已确认文案和音色 THEN 系统 SHALL 创建 TTS 工作流节点。
 2. WHEN TTS 成功 THEN 系统 SHALL 保存音频 artifact。
 3. IF 文案超过 3000 字 THEN 系统 SHALL 拒绝生成。
-4. IF 本地 TTS provider 超时 THEN 系统 SHALL 标记节点失败并允许重试。
-5. IF 未显式启用外部 TTS provider THEN 系统 SHALL NOT 将文案内容发送到线上语音服务。
+4. WHEN TTS 节点执行 THEN 系统 SHALL 从 `local_model_services` 中读取 `tts` 服务的 `baseUrl` 和 `status`。
+5. IF 本地 TTS provider 超时 THEN 系统 SHALL 标记节点失败并允许重试。
+6. IF 未显式启用外部 TTS provider THEN 系统 SHALL NOT 将文案内容发送到线上语音服务。
 
 ### US-3 语音参数
 

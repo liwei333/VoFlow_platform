@@ -81,6 +81,32 @@ describe("Local model health adapter", () => {
     );
   });
 
+  it("records timeout errors when a service check is aborted", async () => {
+    const abortError = new Error("The operation was aborted");
+    abortError.name = "AbortError";
+    const fetcher = vi.fn().mockRejectedValue(abortError);
+
+    await expect(
+      checkLocalModelService(
+        {
+          type: "tts",
+          name: "TTS",
+          baseUrl: "http://localhost:5000",
+          status: "offline",
+        },
+        { fetcher, now: () => 1000, monotonicNow: vi.fn().mockReturnValueOnce(1).mockReturnValueOnce(3001) }
+      )
+    ).resolves.toEqual(
+      expect.objectContaining({
+        type: "tts",
+        status: "offline",
+        latencyMs: 3000,
+        checkedAt: new Date(1000),
+        errorCode: "LOCAL_SERVICE_TIMEOUT",
+      })
+    );
+  });
+
   it("checks FFmpeg by running the configured worker command", async () => {
     const commandRunner = vi.fn().mockResolvedValue({ stdout: "ffmpeg version 7.1" });
 

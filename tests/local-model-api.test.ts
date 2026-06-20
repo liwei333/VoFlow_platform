@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { GET as listServices } from "@/app/api/local-model-services/route";
 import { POST as checkOneService } from "@/app/api/local-model-services/[serviceType]/health/route";
 import { POST as checkAllServices } from "@/app/api/local-model-services/health-all/route";
+import { syncLocalModelServicesFromEnv } from "@/services/localModelService";
 
 describe("local model service APIs", () => {
   let userId: string;
@@ -66,6 +67,7 @@ describe("local model service APIs", () => {
 
   afterEach(async () => {
     await prisma.localModelService.deleteMany();
+    await syncLocalModelServicesFromEnv(process.env);
     await prisma.teamMember.deleteMany({
       where: {
         OR: [

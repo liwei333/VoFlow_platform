@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   LOCAL_MODEL_ENV_EXAMPLES,
@@ -28,6 +29,24 @@ describe("Local model configuration", () => {
         expect.objectContaining({ key: "GPU_MODE" }),
         expect.objectContaining({ key: "QUEUE_REDIS_URL" }),
       ])
+    );
+  });
+
+  it("keeps environment examples aligned with .env.example", () => {
+    const envExample = readFileSync(".env.example", "utf8");
+    const envValues = Object.fromEntries(
+      envExample
+        .split("\n")
+        .map((line) => line.match(/^([A-Z0-9_]+)="?([^"\n]+)"?$/))
+        .filter((match): match is RegExpMatchArray => Boolean(match))
+        .map((match) => [match[1], match[2]])
+    );
+
+    expect(LOCAL_MODEL_ENV_EXAMPLES).toEqual(
+      LOCAL_MODEL_ENV_EXAMPLES.map((example) => ({
+        ...example,
+        value: envValues[example.key],
+      }))
     );
   });
 

@@ -5,6 +5,7 @@
 - [ ] 0. 执行后续开发规范检查
   - 先阅读 `docs/03-VoFlow开发执行规范.md`
   - 本 Spec 不得在 Worker、API 或 UI 中散写 TTS 服务地址、音色状态、参数范围、3000 字限制、错误码或音频 artifact 路径
+  - TTS 服务 baseUrl、服务状态、状态文案和健康检查必须复用 `voflow-local-model-monitor` 的 `tts` 服务注册表、配置 helper、health adapter 和 API
   - TTS provider、音色 serializer、参数校验、artifact 写入、API 响应必须进入公共 helper/service
   - 若发现同类逻辑已经重复两处以上，先抽公共函数或公共常量，再继续业务实现
   - Checkpoint 反馈必须包含硬编码检查、公共函数提取情况和验证命令
@@ -36,7 +37,8 @@
   - _Requirements: US-2_
 
 - [ ] 5. 接入本地 TTS provider 配置
-  - 支持通过 env 配置本地服务地址
+  - 从 `local_model_services` 读取 `tts` 服务的 `baseUrl` 和 `status`
+  - 不在 TTS 模块重新读取或定义 `TTS_BASE_URL`
   - 处理超时、重试和 provider 错误映射
   - 默认不要求线上 TTS 密钥
   - _Requirements: US-2_

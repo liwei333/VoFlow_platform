@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WorkflowQueuePayload } from "@/lib/queue/adapter";
 import {
+  createDefaultWorkflowNodeHandlers,
   executeWorkflowNode,
   type WorkflowNodeExecutionRepository,
   type WorkflowNodeHandlers,
@@ -19,6 +20,12 @@ const payload: WorkflowQueuePayload = {
 };
 
 describe("executeWorkflowNode", () => {
+  it("registers the ASR handler for script_prepare nodes by default", () => {
+    const handlers = createDefaultWorkflowNodeHandlers();
+
+    expect(handlers.script_prepare).toBeTypeOf("function");
+  });
+
   it("runs the matching handler and marks the node succeeded with output", async () => {
     const calls: unknown[] = [];
     const repository = createExecutionRepository(calls);
@@ -86,6 +93,42 @@ describe("executeWorkflowNode", () => {
           message: "tts provider timeout",
         },
         finishedAt: new Date("2026-06-20T00:30:00.000Z"),
+      },
+    });
+  });
+
+  it("preserves retryable local model error codes from handlers", async () => {
+    const calls: unknown[] = [];
+    const repository = createExecutionRepository(calls);
+    const handlers: WorkflowNodeHandlers = {
+      tts: async () => {
+        const error = new Error("本地 LLM 服务不可用");
+        Object.assign(error, { code: "LOCAL_LLM_UNAVAILABLE" });
+        throw error;
+      },
+    };
+
+    const result = await executeWorkflowNode(payload, {
+      repository,
+      handlers,
+      now: () => new Date("2026-06-20T00:45:00.000Z"),
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "LOCAL_LLM_UNAVAILABLE",
+        message: "本地 LLM 服务不可用",
+      },
+    });
+    expect(calls.at(-1)).toEqual({
+      markFailed: {
+        nodeId: "node-1",
+        error: {
+          code: "LOCAL_LLM_UNAVAILABLE",
+          message: "本地 LLM 服务不可用",
+        },
+        finishedAt: new Date("2026-06-20T00:45:00.000Z"),
       },
     });
   });

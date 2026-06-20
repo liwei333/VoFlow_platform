@@ -93,6 +93,11 @@ export async function getJobArtifact(
   return stream;
 }
 
+export async function getObjectByPath(objectName: string): Promise<Readable> {
+  const client = getMinioClient();
+  return client.getObject(MINIO_BUCKET, objectName);
+}
+
 export async function deleteJobArtifact(
   teamId: string,
   jobId: string,

@@ -39,7 +39,7 @@ export const LOCAL_MODEL_SERVICE_DEFINITIONS: LocalModelServiceDefinition[] = [
 
 export const LOCAL_MODEL_ENV_EXAMPLES = [
   { key: "LLM_BASE_URL", value: "http://localhost:8000" },
-  { key: "LLM_MODEL", value: "qwen2.5" },
+  { key: "LLM_MODEL", value: "llama3.2" },
   { key: "ASR_BASE_URL", value: "http://localhost:6000" },
   { key: "TTS_BASE_URL", value: "http://localhost:5000" },
   { key: "AVATAR_BASE_URL", value: "http://localhost:7000" },

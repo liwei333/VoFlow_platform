@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { WorkflowQueuePayload } from "@/lib/queue/adapter";
 import { WORKFLOW_NODE_STATUS } from "@/lib/workflow/status";
+import { createAsrWorkflowNodeHandler } from "@/services/scriptAsrWorkerService";
 
 export const WORKFLOW_NODE_EXECUTION_FAILED = "WORKFLOW_NODE_EXECUTION_FAILED";
 
@@ -98,9 +99,15 @@ const prismaWorkflowNodeExecutionRepository: WorkflowNodeExecutionRepository = {
   },
 };
 
+export function createDefaultWorkflowNodeHandlers(): WorkflowNodeHandlers {
+  return {
+    script_prepare: createAsrWorkflowNodeHandler(),
+  };
+}
+
 const defaultExecuteWorkflowNodeDependencies: ExecuteWorkflowNodeDependencies = {
   repository: prismaWorkflowNodeExecutionRepository,
-  handlers: {},
+  handlers: createDefaultWorkflowNodeHandlers(),
   now: () => new Date(),
 };
 
@@ -149,10 +156,21 @@ export function createMockWorkflowNodeHandler(nodeType: WorkflowQueuePayload["no
 }
 
 function normalizeExecutionError(error: unknown): WorkflowNodeExecutionError {
+  if (error instanceof Error && hasErrorCode(error)) {
+    return {
+      code: error.code,
+      message: error.message,
+    };
+  }
+
   return {
     code: WORKFLOW_NODE_EXECUTION_FAILED,
     message: error instanceof Error ? error.message : "节点执行失败",
   };
+}
+
+function hasErrorCode(error: Error): error is Error & { code: string } {
+  return "code" in error && typeof (error as { code?: unknown }).code === "string";
 }
 
 function toPrismaJson(value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull {

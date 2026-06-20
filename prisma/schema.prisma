@@ -91,6 +91,25 @@ enum LocalModelServiceStatus {
   misconfigured
 }
 
+enum ScriptSourceType {
+  pasted
+  asr
+  generated
+}
+
+enum ScriptStatus {
+  draft
+  ready
+  approved
+  archived
+}
+
+enum ScriptCandidateStatus {
+  draft
+  approved
+  rejected
+}
+
 model Asset {
   id            String        @id @default(cuid())
   teamId        String
@@ -217,6 +236,7 @@ model Project {
   team      Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
   owner     User       @relation("ProjectOwner", fields: [ownerId], references: [id])
   videoJobs VideoJob[]
+  scripts   Script[]
 
   @@map("projects")
 }
@@ -239,6 +259,7 @@ model VideoJob {
   owner     User           @relation("VideoJobOwner", fields: [ownerId], references: [id])
   nodes     WorkflowNode[]
   artifacts Artifact[]
+  scripts   Script[]
 
   @@index([projectId])
   @@index([teamId, createdAt])
@@ -307,4 +328,62 @@ model LocalModelService {
 
   @@index([status])
   @@map("local_model_services")
+}
+
+model Script {
+  id         String           @id @default(cuid())
+  projectId  String
+  jobId      String?
+  sourceType ScriptSourceType
+  content    String
+  metadata   Json?
+  version    Int              @default(1)
+  status     ScriptStatus     @default(draft)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  job         VideoJob?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  candidates  ScriptCandidate[]
+  asrSegments AsrSegment[]
+
+  @@index([projectId])
+  @@index([jobId])
+  @@index([status])
+  @@map("scripts")
+}
+
+model ScriptCandidate {
+  id              String                @id @default(cuid())
+  scriptId        String
+  content         String
+  titleCandidates Json?
+  riskReport      Json?
+  modelName       String?
+  prompt          Json?
+  version         Int                   @default(1)
+  status          ScriptCandidateStatus @default(draft)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  script Script @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+
+  @@index([scriptId])
+  @@index([status])
+  @@map("script_candidates")
+}
+
+model AsrSegment {
+  id        String   @id @default(cuid())
+  scriptId  String
+  startMs   Int
+  endMs     Int
+  text      String
+  createdAt DateTime @default(now())
+
+  script Script @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+
+  @@index([scriptId])
+  @@index([scriptId, startMs])
+  @@map("asr_segments")
 }

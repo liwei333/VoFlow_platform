@@ -19,20 +19,20 @@ const navItems = [
 
 interface ModelStatus {
   configured: boolean;
-  status: "online" | "offline" | "unknown";
+  status: "online" | "offline" | "busy" | "misconfigured" | "unknown";
 }
 
 export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 bg-gray-900 text-white min-h-screen">
+    <aside className="w-full bg-gray-900 text-white md:min-h-screen md:w-64">
       <div className="p-4">
         <h1 className="text-xl font-bold">VoFlow</h1>
         <p className="text-sm text-gray-400">智能口播平台</p>
       </div>
 
-      <nav className="mt-6">
+      <nav className="grid grid-cols-2 sm:grid-cols-3 md:mt-6 md:block">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -86,7 +86,9 @@ function ModelStatusBadge() {
   const allConfigured = Object.values(modelStatus).every((m) => m.configured);
   const anyOnline = Object.values(modelStatus).some((m) => m.status === "online");
   const anyOffline = Object.values(modelStatus).some((m) => m.status === "offline");
-  const anyUnknown = Object.values(modelStatus).some((m) => m.status === "unknown");
+  const anyUnknown = Object.values(modelStatus).some(
+    (m) => m.status === "unknown" || m.status === "misconfigured"
+  );
 
   let statusText = "未配置";
   let statusColor = "bg-gray-400";
@@ -115,16 +117,16 @@ function ModelStatusBadge() {
 
 export function TopBar() {
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
-      <div className="flex items-center flex-1">
+    <header className="flex flex-col gap-3 border-b border-gray-200 bg-white px-4 py-4 md:h-16 md:flex-row md:items-center md:justify-between md:px-6 md:py-0">
+      <div className="flex min-w-0 flex-1 items-center">
         <input
           type="text"
           placeholder="搜索项目、文案、素材..."
-          className="w-96 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full max-w-md rounded-md border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
 
-      <div className="flex items-center space-x-4">
+      <div className="flex flex-wrap items-center gap-4">
         <ModelStatusBadge />
         <button
           onClick={async () => {

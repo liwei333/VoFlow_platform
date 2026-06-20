@@ -2,62 +2,66 @@
 
 ## Implementation Plan
 
-- [ ] 0. 执行后续开发规范检查
+- [x] 0. 执行后续开发规范检查
   - 先阅读 `docs/03-VoFlow开发执行规范.md`
   - 本 Spec 不得在 Worker、API 或页面中散写 LLM 地址、模型名、prompt 参数、字数限制、错误码、敏感词或外部模型开关
+  - LLM/ASR 的 baseUrl、modelName、服务状态、状态文案和健康检查必须复用 `voflow-local-model-monitor` 的服务注册表、配置 helper、health adapter 和 API
   - LLM provider、prompt 模板、风险词库、ASR segments serializer、API 响应必须进入公共 helper/service
   - 默认配置不得调用线上大模型；外部 provider 必须显式配置并有测试覆盖
   - 若发现同类逻辑已经重复两处以上，先抽公共函数或公共常量，再继续业务实现
   - Checkpoint 反馈必须包含硬编码检查、公共函数提取情况和验证命令
   - _Requirements: US-1, US-2, US-3, US-4, US-5_
 
-- [ ] 1. 创建文案数据库迁移
+- [x] 1. 创建文案数据库迁移
   - 创建 `scripts`、`script_candidates`、`asr_segments`
   - 添加 project_id、job_id、script_id 索引
   - 定义 source_type 和 status 校验
   - _Requirements: US-1, US-2, US-3_
 
-- [ ] 2. 实现文案保存 API
+- [x] 2. 实现文案保存 API
   - 校验项目权限
   - 校验非空和 3000 字限制
   - 写入 scripts 版本 1
   - _Requirements: US-1_
 
-- [ ] 3. 实现音视频转写任务创建 API
+- [x] 3. 实现音视频转写任务创建 API
   - 校验素材授权和类型
   - 校验 3 分钟以内
   - 创建 ASR workflow node input
   - _Requirements: US-2_
 
-- [ ] 4. 接入 ASR Worker handler
+- [x] 4. 接入 ASR Worker handler
   - 从对象存储下载音视频
-  - 调用 faster-whisper 或 mock provider
+  - 从本地模型服务注册表读取 `asr` 服务配置
+  - 调用注册表中的 ASR 服务或 mock provider
   - 输出文本和 segments
   - _Requirements: US-2_
 
-- [ ] 5. 保存 ASR 转写结果
+- [x] 5. 保存 ASR 转写结果
   - 写入 scripts
   - 写入 asr_segments
   - 将结果作为节点 output_json
   - _Requirements: US-2_
 
-- [ ] 6. 定义 LLM Provider 接口
+- [x] 6. 定义 LLM Provider 接口
   - `rewriteScript(input, options)`
   - `generateTitles(script, platform)`
   - `healthCheck()`
   - 默认 provider 为 local OpenAI-compatible
+  - provider 只消费 `llm` 服务的 `baseUrl`、`modelName` 和业务生成参数，不直接读取 `LLM_BASE_URL`/`LLM_MODEL`
   - _Requirements: US-3, US-4, US-5_
 
-- [ ] 7. 实现本地 LLM 配置读取
-  - 从环境变量读取 `LLM_PROVIDER`
-  - 从环境变量读取 `LLM_BASE_URL`、`LLM_MODEL`、`LLM_TIMEOUT_MS`、`LLM_MAX_TOKENS`
-  - 不要求配置线上模型密钥
+- [x] 7. 接入本地模型服务注册表
+  - 从 `local_model_services` 读取 `llm` 服务的 `baseUrl`、`modelName`、`status`
+  - 从 `local_model_services` 读取 `asr` 服务的 `baseUrl`、`status`
+  - 仅在文案 AI 模块读取 `LLM_PROVIDER`、`LLM_MAX_TOKENS` 等业务生成参数，不重复定义模型地址、模型名、超时和状态文案
   - _Requirements: US-5_
 
-- [ ] 8. 实现本地 LLM 健康检查
-  - 实现 `GET /api/llm/health`
-  - 检查本地模型服务连接和模型名
-  - 不可用时返回 `LOCAL_LLM_UNAVAILABLE`
+- [x] 8. 复用本地模型健康状态
+  - 不新增 `GET /api/llm/health`
+  - 调用 `voflow-local-model-monitor` 的 health adapter 或 `/api/local-model-services/{serviceType}/health`
+  - 将 `llm` 不可用映射为 `LOCAL_LLM_UNAVAILABLE`
+  - 将 `asr` 不可用映射为 `LOCAL_ASR_UNAVAILABLE`
   - _Requirements: US-5_
 
 - [ ] 9. 设计口播改写 Prompt 模板
