@@ -24,6 +24,8 @@ describe("executeWorkflowNode", () => {
     const handlers = createDefaultWorkflowNodeHandlers();
 
     expect(handlers.script_prepare).toBeTypeOf("function");
+    expect(handlers.script_rewrite).toBeTypeOf("function");
+    expect(handlers.script_title).toBeTypeOf("function");
   });
 
   it("runs the matching handler and marks the node succeeded with output", async () => {

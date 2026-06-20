@@ -1,3 +1,5 @@
+import { buildRewriteScriptPrompt, type ScriptPromptMessage } from "@/lib/scripts/promptTemplates";
+
 export const LOCAL_OPENAI_COMPATIBLE_PROVIDER = "local-openai-compatible";
 
 export interface LocalLlmServiceConfig {
@@ -59,11 +61,6 @@ export interface CreateLocalOpenAiCompatibleLlmProviderInput {
   now?: () => number;
 }
 
-interface ChatMessage {
-  role: "system" | "user";
-  content: string;
-}
-
 export function createLocalOpenAiCompatibleLlmProvider(
   input: CreateLocalOpenAiCompatibleLlmProviderInput
 ): ScriptLlmProvider {
@@ -76,7 +73,10 @@ export function createLocalOpenAiCompatibleLlmProvider(
         service,
         baseUrl,
         fetcher,
-        messages: buildRewriteMessages(scriptInput, options),
+        messages: buildRewriteScriptPrompt({
+          ...scriptInput,
+          candidateCount: options.candidateCount,
+        }).messages,
         maxTokens: options.maxTokens,
         temperature: options.temperature,
         traceId: options.traceId,
@@ -163,7 +163,7 @@ async function postChatCompletion(input: {
   service: LocalLlmServiceConfig;
   baseUrl: string;
   fetcher: typeof fetch;
-  messages: ChatMessage[];
+  messages: ScriptPromptMessage[];
   maxTokens?: number;
   temperature?: number;
   traceId?: string;
@@ -195,34 +195,11 @@ async function postChatCompletion(input: {
   return getChoiceContent(payload);
 }
 
-function buildRewriteMessages(input: RewriteScriptInput, options: RewriteScriptOptions): ChatMessage[] {
-  const candidateCount = options.candidateCount ?? 3;
-
-  return [
-    {
-      role: "system",
-      content: "你是短视频口播文案改写助手。只输出 JSON。",
-    },
-    {
-      role: "user",
-      content: [
-        `请生成 ${candidateCount} 个口播化候选文案。`,
-        `平台: ${input.platform ?? "通用"}`,
-        `语气: ${input.tone ?? "自然"}`,
-        input.durationSeconds ? `目标时长: ${input.durationSeconds} 秒` : null,
-        input.forbiddenWords?.length ? `禁用词: ${input.forbiddenWords.join(",")}` : null,
-        "输出格式: {\"candidates\":[\"...\"]}",
-        `原文: ${input.script}`,
-      ].filter(Boolean).join("\n"),
-    },
-  ];
-}
-
 function buildTitleMessages(
   script: string,
   platform: string,
   options: GenerateTitlesOptions
-): ChatMessage[] {
+): ScriptPromptMessage[] {
   const titleCount = options.titleCount ?? 5;
 
   return [

@@ -64,20 +64,20 @@
   - 将 `asr` 不可用映射为 `LOCAL_ASR_UNAVAILABLE`
   - _Requirements: US-5_
 
-- [ ] 9. 设计口播改写 Prompt 模板
+- [x] 9. 设计口播改写 Prompt 模板
   - 输入原文、平台、时长、语气、禁用词
   - 输出 3-5 个候选
   - 要求口播自然、结构清晰、避免照搬
   - _Requirements: US-3_
 
-- [ ] 10. 实现文案改写 Worker
+- [x] 10. 实现文案改写 Worker
   - 调用本地 LLM Provider
   - 解析候选结果
   - 保存 model_name、prompt_json、version
   - 本地 LLM 失败时标记节点可重试
   - _Requirements: US-3, US-5_
 
-- [ ] 11. 实现标题生成 Worker
+- [x] 11. 实现标题生成 Worker
   - 生成不少于 5 个标题
   - 保存到 title_candidates_json
   - 支持目标平台参数

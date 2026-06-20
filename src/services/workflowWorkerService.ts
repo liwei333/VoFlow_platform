@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import type { WorkflowQueuePayload } from "@/lib/queue/adapter";
 import { WORKFLOW_NODE_STATUS } from "@/lib/workflow/status";
 import { createAsrWorkflowNodeHandler } from "@/services/scriptAsrWorkerService";
+import { createRewriteWorkflowNodeHandler } from "@/services/scriptRewriteWorkerService";
+import { createTitleWorkflowNodeHandler } from "@/services/scriptTitleWorkerService";
 
 export const WORKFLOW_NODE_EXECUTION_FAILED = "WORKFLOW_NODE_EXECUTION_FAILED";
 
@@ -102,6 +104,8 @@ const prismaWorkflowNodeExecutionRepository: WorkflowNodeExecutionRepository = {
 export function createDefaultWorkflowNodeHandlers(): WorkflowNodeHandlers {
   return {
     script_prepare: createAsrWorkflowNodeHandler(),
+    script_rewrite: createRewriteWorkflowNodeHandler(),
+    script_title: createTitleWorkflowNodeHandler(),
   };
 }
 
