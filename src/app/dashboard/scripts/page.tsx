@@ -14,9 +14,14 @@ import {
   formatEstimatedSpeechDuration,
   formatMediaDuration,
   getCandidateStatusView,
-  isTranscribableMediaAsset,
   normalizeTitleCandidates,
 } from "@/lib/scripts/ui";
+import {
+  getReferenceFallbackMessage,
+  getReferenceLinkPlatformPreview,
+  getReferenceSourceStatusView,
+  isReferenceSelectableMediaAsset,
+} from "@/lib/references/ui";
 
 type Project = {
   id: string;
@@ -80,6 +85,23 @@ type WorkflowJob = {
   progress: number;
 };
 
+type ReferenceSource = {
+  id: string;
+  projectId: string;
+  teamId: string;
+  sourceType: string;
+  platform: string | null;
+  sourceUrl: string | null;
+  assetId: string | null;
+  status: string;
+  durationMs: number | null;
+  transcript?: string | null;
+  structureJson: unknown;
+  errorJson: unknown;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type LocalModelService = {
   serviceType: LocalModelServiceType;
   name: string;
@@ -110,13 +132,17 @@ export default function ScriptsPage() {
   const [scripts, setScripts] = useState<ScriptRecord[]>([]);
   const [jobs, setJobs] = useState<WorkflowJob[]>([]);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
+  const [referenceSources, setReferenceSources] = useState<ReferenceSource[]>([]);
   const [services, setServices] = useState<LocalModelService[]>([]);
   const [content, setContent] = useState("");
+  const [referenceLink, setReferenceLink] = useState("");
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingScripts, setLoadingScripts] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingMediaAssets, setLoadingMediaAssets] = useState(false);
   const [creatingTranscription, setCreatingTranscription] = useState(false);
+  const [creatingReferenceFromAsset, setCreatingReferenceFromAsset] = useState(false);
+  const [creatingReferenceFromUrl, setCreatingReferenceFromUrl] = useState(false);
   const [approvingCandidateId, setApprovingCandidateId] = useState<string | null>(null);
   const [riskConfirmations, setRiskConfirmations] = useState<Record<string, boolean>>({});
   const [selectedAssetId, setSelectedAssetId] = useState("");
@@ -140,8 +166,19 @@ export default function ScriptsPage() {
   const llmService = services.find((service) => service.serviceType === "llm") ?? null;
   const asrService = services.find((service) => service.serviceType === "asr") ?? null;
   const selectedAsset = mediaAssets.find((asset) => asset.id === selectedAssetId) ?? null;
+  const referenceLinkPreview = useMemo(
+    () => getReferenceLinkPlatformPreview(referenceLink),
+    [referenceLink]
+  );
   const canSave = content.trim().length > 0 && content.trim().length <= SCRIPT_MAX_LENGTH && Boolean(selectedProjectId) && !saving;
   const canCreateTranscription = Boolean(selectedProjectId) && Boolean(selectedAssetId) && !creatingTranscription;
+  const canCreateReferenceFromAsset =
+    Boolean(selectedProjectId) && Boolean(selectedAssetId) && !creatingReferenceFromAsset;
+  const canCreateReferenceFromUrl =
+    Boolean(selectedProjectId) &&
+    Boolean(referenceLink.trim()) &&
+    referenceLinkPreview.supported &&
+    !creatingReferenceFromUrl;
 
   const fetchProjects = useCallback(async () => {
     setLoadingProjects(true);
@@ -194,7 +231,7 @@ export default function ScriptsPage() {
       const assets = [
         ...(audioBody.code === "SUCCESS" && audioBody.data ? audioBody.data.assets : []),
         ...(videoBody.code === "SUCCESS" && videoBody.data ? videoBody.data.assets : []),
-      ].filter(isTranscribableMediaAsset);
+      ].filter(isReferenceSelectableMediaAsset);
 
       setMediaAssets(assets);
       setSelectedAssetId((current) => current || assets[0]?.id || "");
@@ -257,6 +294,35 @@ export default function ScriptsPage() {
     }
   }, []);
 
+  const mergeReferenceSource = useCallback((nextReferenceSource: ReferenceSource) => {
+    setReferenceSources((current) => {
+      const existingIndex = current.findIndex((source) => source.id === nextReferenceSource.id);
+      if (existingIndex === -1) {
+        return [nextReferenceSource, ...current];
+      }
+
+      return current.map((source) =>
+        source.id === nextReferenceSource.id ? nextReferenceSource : source
+      );
+    });
+  }, []);
+
+  const fetchReferenceSource = useCallback(
+    async (referenceSourceId: string) => {
+      try {
+        const response = await fetch(`/api/references/${referenceSourceId}`);
+        const body = (await response.json()) as ApiResponse<{ referenceSource: ReferenceSource }>;
+
+        if (body.code === "SUCCESS" && body.data) {
+          mergeReferenceSource(body.data.referenceSource);
+        }
+      } catch (error) {
+        console.error("Failed to fetch reference source:", error);
+      }
+    },
+    [mergeReferenceSource]
+  );
+
   useEffect(() => {
     fetchProjects();
     fetchLocalModelServices();
@@ -267,7 +333,25 @@ export default function ScriptsPage() {
     fetchProjectScripts(selectedProjectId);
     fetchProjectJobs(selectedProjectId);
     setRiskConfirmations({});
+    setReferenceSources([]);
   }, [fetchProjectJobs, fetchProjectScripts, selectedProjectId]);
+
+  useEffect(() => {
+    const activeReferenceSourceIds = referenceSources
+      .filter((source) => getReferenceSourceStatusView(source.status).isActive)
+      .map((source) => source.id);
+
+    if (activeReferenceSourceIds.length === 0) {
+      return;
+    }
+
+    activeReferenceSourceIds.forEach(fetchReferenceSource);
+    const intervalId = window.setInterval(() => {
+      activeReferenceSourceIds.forEach(fetchReferenceSource);
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [fetchReferenceSource, referenceSources]);
 
   async function handleSaveScript(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -356,6 +440,115 @@ export default function ScriptsPage() {
       setErrorMessage("转写任务创建失败");
     } finally {
       setCreatingTranscription(false);
+    }
+  }
+
+  async function createReferenceFromAsset(assetId = selectedAssetId) {
+    if (!selectedProjectId) {
+      setErrorMessage("请先选择项目");
+      return;
+    }
+
+    if (!assetId) {
+      setErrorMessage("请先选择已授权音视频素材");
+      return;
+    }
+
+    setCreatingReferenceFromAsset(true);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(`/api/projects/${selectedProjectId}/references/from-asset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assetId }),
+      });
+      const body = (await response.json()) as ApiResponse<{
+        referenceSource: ReferenceSource;
+        job: WorkflowJob;
+      }>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setErrorMessage(body.message || "参考素材提取任务创建失败");
+        return;
+      }
+
+      mergeReferenceSource(body.data.referenceSource);
+      setSelectedJobId(body.data.job.id);
+      setNoticeMessage("参考素材提取任务已创建");
+      await fetchProjectJobs(selectedProjectId);
+    } catch (error) {
+      console.error("Failed to create reference task from asset:", error);
+      setErrorMessage("参考素材提取任务创建失败");
+    } finally {
+      setCreatingReferenceFromAsset(false);
+    }
+  }
+
+  async function createReferenceFromUrl(sourceUrl = referenceLink) {
+    const trimmedUrl = sourceUrl.trim();
+
+    if (!selectedProjectId) {
+      setErrorMessage("请先选择项目");
+      return;
+    }
+
+    if (!trimmedUrl) {
+      setErrorMessage("请输入参考链接");
+      return;
+    }
+
+    const preview = getReferenceLinkPlatformPreview(trimmedUrl);
+    if (!preview.supported) {
+      setErrorMessage(preview.message);
+      return;
+    }
+
+    setCreatingReferenceFromUrl(true);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(`/api/projects/${selectedProjectId}/references/from-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceUrl: trimmedUrl }),
+      });
+      const body = (await response.json()) as ApiResponse<{
+        referenceSource?: ReferenceSource;
+        fallback?: { message?: string };
+      }>;
+
+      if (body.code !== "SUCCESS" || !body.data?.referenceSource) {
+        const fallbackMessage =
+          body.data?.fallback?.message ||
+          (body.code === "REFERENCE_PARSE_FAILED"
+            ? getReferenceFallbackMessage({ code: "REFERENCE_PARSE_FAILED" })
+            : "");
+        setErrorMessage([body.message || "参考链接解析失败", fallbackMessage].filter(Boolean).join(" "));
+        return;
+      }
+
+      mergeReferenceSource(body.data.referenceSource);
+      setReferenceLink("");
+      setNoticeMessage("参考链接已解析");
+    } catch (error) {
+      console.error("Failed to create reference source from URL:", error);
+      setErrorMessage("参考链接解析失败，建议上传视频/音频继续提取。");
+    } finally {
+      setCreatingReferenceFromUrl(false);
+    }
+  }
+
+  function retryReferenceSource(source: ReferenceSource) {
+    if (source.assetId) {
+      createReferenceFromAsset(source.assetId);
+      return;
+    }
+
+    if (source.sourceUrl) {
+      createReferenceFromUrl(source.sourceUrl);
     }
   }
 
@@ -536,6 +729,77 @@ export default function ScriptsPage() {
                 : "仅展示已授权的音频和视频素材"}
             </div>
           </section>
+
+          <section className="rounded-md border border-gray-200 bg-white p-5">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-base font-semibold text-gray-900">参考素材/链接</h2>
+              <span className="text-sm text-gray-500">
+                {referenceSources.length === 0 ? "暂无参考来源" : `${referenceSources.length} 条参考来源`}
+              </span>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-700">从素材提取</label>
+                <select
+                  value={selectedAssetId}
+                  onChange={(event) => setSelectedAssetId(event.target.value)}
+                  disabled={loadingMediaAssets || mediaAssets.length === 0}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                >
+                  <option value="">
+                    {loadingMediaAssets ? "加载素材中..." : mediaAssets.length === 0 ? "暂无已授权音视频素材" : "选择音视频素材"}
+                  </option>
+                  {mediaAssets.map((asset) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.type === "audio" ? "音频" : "视频"} / {asset.name} / {formatMediaDuration(asset.metadata)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => createReferenceFromAsset()}
+                  disabled={!canCreateReferenceFromAsset}
+                  className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {creatingReferenceFromAsset ? "创建中..." : "提取参考结构"}
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-700">从链接解析</label>
+                <input
+                  value={referenceLink}
+                  onChange={(event) => setReferenceLink(event.target.value)}
+                  placeholder="粘贴抖音/快手/小红书等参考链接"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <div className={referenceLinkPreview.supported ? "text-sm text-emerald-700" : "text-sm text-gray-500"}>
+                  {referenceLinkPreview.message}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => createReferenceFromUrl()}
+                  disabled={!canCreateReferenceFromUrl}
+                  className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {creatingReferenceFromUrl ? "解析中..." : "解析参考链接"}
+                </button>
+              </div>
+            </div>
+
+            {referenceSources.length > 0 && (
+              <div className="mt-5 space-y-3">
+                {referenceSources.map((source) => (
+                  <ReferenceSourceRow
+                    key={source.id}
+                    source={source}
+                    onRetry={retryReferenceSource}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
         </div>
 
         <section className="rounded-md border border-gray-200 bg-white p-5">
@@ -603,6 +867,80 @@ function SummaryCell({ label, value }: { label: string; value: number }) {
     <div className="rounded-md border border-gray-200 bg-white p-4">
       <div className="text-sm text-gray-500">{label}</div>
       <div className="mt-2 text-2xl font-semibold text-gray-900">{value}</div>
+    </div>
+  );
+}
+
+function ReferenceSourceRow({
+  source,
+  onRetry,
+}: {
+  source: ReferenceSource;
+  onRetry: (source: ReferenceSource) => void;
+}) {
+  const statusView = getReferenceSourceStatusView(source.status);
+  const sourceLabel =
+    source.sourceType === "asset"
+      ? "素材参考"
+      : source.platform
+        ? `${source.platform} 链接`
+        : "参考链接";
+  const canRetry = source.status === "failed" && Boolean(source.assetId || source.sourceUrl);
+  const structureText = source.structureJson
+    ? JSON.stringify(source.structureJson, null, 2)
+    : "";
+
+  return (
+    <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ${statusView.className}`}>
+              {statusView.label}
+            </span>
+            <span className="text-sm font-medium text-gray-900">{sourceLabel}</span>
+            {source.durationMs !== null && (
+              <span className="text-xs text-gray-500">{formatMediaDuration({ durationMs: source.durationMs })}</span>
+            )}
+          </div>
+          <div className="mt-2 truncate text-xs text-gray-500">
+            {source.sourceUrl || source.assetId || source.id}
+          </div>
+        </div>
+        {canRetry && (
+          <button
+            type="button"
+            onClick={() => onRetry(source)}
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            重试提取
+          </button>
+        )}
+      </div>
+
+      {source.status === "failed" && (
+        <div className="mt-3 rounded-md border border-rose-100 bg-white px-3 py-2 text-sm text-rose-700">
+          {getReferenceFallbackMessage(source.errorJson)}
+        </div>
+      )}
+
+      {source.transcript && (
+        <div className="mt-3">
+          <div className="text-xs font-medium text-gray-500">转写文本</div>
+          <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-sm leading-6 text-gray-700">
+            {source.transcript}
+          </p>
+        </div>
+      )}
+
+      {structureText && (
+        <div className="mt-3">
+          <div className="text-xs font-medium text-gray-500">结构结果</div>
+          <pre className="mt-1 max-h-40 overflow-auto rounded-md bg-white p-3 text-xs leading-5 text-gray-700">
+            {structureText}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }

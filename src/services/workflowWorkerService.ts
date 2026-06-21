@@ -6,6 +6,7 @@ import { createAsrWorkflowNodeHandler } from "@/services/scriptAsrWorkerService"
 import { createRiskWorkflowNodeHandler } from "@/services/scriptRiskWorkerService";
 import { createRewriteWorkflowNodeHandler } from "@/services/scriptRewriteWorkerService";
 import { createTitleWorkflowNodeHandler } from "@/services/scriptTitleWorkerService";
+import { createReferenceAsrWorkflowNodeHandler } from "@/services/referenceAsrService";
 
 export const WORKFLOW_NODE_EXECUTION_FAILED = "WORKFLOW_NODE_EXECUTION_FAILED";
 
@@ -125,6 +126,7 @@ const prismaWorkflowNodeExecutionRepository: WorkflowNodeExecutionRepository = {
 
 export function createDefaultWorkflowNodeHandlers(): WorkflowNodeHandlers {
   return {
+    reference_extract: createReferenceAsrWorkflowNodeHandler(),
     script_prepare: createAsrWorkflowNodeHandler(),
     script_rewrite: createRewriteWorkflowNodeHandler(),
     script_title: createTitleWorkflowNodeHandler(),

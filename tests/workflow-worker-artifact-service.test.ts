@@ -23,6 +23,7 @@ describe("executeWorkflowNode", () => {
   it("registers the ASR handler for script_prepare nodes by default", () => {
     const handlers = createDefaultWorkflowNodeHandlers();
 
+    expect(handlers.reference_extract).toBeTypeOf("function");
     expect(handlers.script_prepare).toBeTypeOf("function");
     expect(handlers.script_rewrite).toBeTypeOf("function");
     expect(handlers.script_title).toBeTypeOf("function");

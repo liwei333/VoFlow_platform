@@ -110,6 +110,21 @@ enum ScriptCandidateStatus {
   rejected
 }
 
+enum ReferenceSourceType {
+  url
+  asset
+  pasted_text
+}
+
+enum ReferenceSourceStatus {
+  pending
+  parsing
+  transcribing
+  analyzing
+  succeeded
+  failed
+}
+
 model Asset {
   id            String        @id @default(cuid())
   teamId        String
@@ -125,8 +140,9 @@ model Asset {
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
 
-  owner    User           @relation("AssetOwner", fields: [ownerId], references: [id])
-  consents AssetConsent[]
+  owner            User              @relation("AssetOwner", fields: [ownerId], references: [id])
+  consents         AssetConsent[]
+  referenceSources ReferenceSource[]
 
   @@index([teamId, createdAt])
   @@index([teamId, type])
@@ -200,10 +216,11 @@ model Team {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner     User         @relation("TeamOwner", fields: [ownerId], references: [id])
-  members   TeamMember[]
-  projects  Project[]
-  videoJobs VideoJob[]
+  owner            User              @relation("TeamOwner", fields: [ownerId], references: [id])
+  members          TeamMember[]
+  projects         Project[]
+  videoJobs        VideoJob[]
+  referenceSources ReferenceSource[]
 
   @@map("teams")
 }
@@ -233,10 +250,11 @@ model Project {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  team      Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  owner     User       @relation("ProjectOwner", fields: [ownerId], references: [id])
-  videoJobs VideoJob[]
-  scripts   Script[]
+  team             Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner            User              @relation("ProjectOwner", fields: [ownerId], references: [id])
+  videoJobs        VideoJob[]
+  scripts          Script[]
+  referenceSources ReferenceSource[]
 
   @@map("projects")
 }
@@ -342,15 +360,45 @@ model Script {
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
 
-  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  job         VideoJob?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  candidates  ScriptCandidate[]
-  asrSegments AsrSegment[]
+  project                    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  job                        VideoJob?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  candidates                 ScriptCandidate[]
+  asrSegments                AsrSegment[]
+  referenceTranscriptSources ReferenceSource[] @relation("ReferenceTranscript")
 
   @@index([projectId])
   @@index([jobId])
   @@index([status])
   @@map("scripts")
+}
+
+model ReferenceSource {
+  id                 String                @id @default(cuid())
+  projectId          String
+  teamId             String
+  sourceType         ReferenceSourceType
+  platform           String?
+  sourceUrl          String?
+  assetId            String?
+  status             ReferenceSourceStatus @default(pending)
+  durationMs         Int?
+  transcriptScriptId String?
+  structureJson      Json?
+  errorJson          Json?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  project          Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  team             Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  asset            Asset?  @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  transcriptScript Script? @relation("ReferenceTranscript", fields: [transcriptScriptId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([teamId, createdAt])
+  @@index([assetId])
+  @@index([transcriptScriptId])
+  @@index([status])
+  @@map("reference_sources")
 }
 
 model ScriptCandidate {
