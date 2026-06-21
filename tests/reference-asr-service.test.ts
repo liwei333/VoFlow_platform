@@ -281,6 +281,7 @@ describe("reference ASR worker handler", () => {
   });
 
   it("saves transcript text and segments to the reference source", async () => {
+    const queue = new MemoryWorkflowQueue();
     const handler = createReferenceAsrWorkflowNodeHandler({
       storage: {
         downloadObject: async () => Buffer.from("media-bytes"),
@@ -307,6 +308,8 @@ describe("reference ASR worker handler", () => {
           };
         },
       },
+      queue,
+      createTraceId: () => "trace-reference-structure-next",
     });
 
     const result = await handler({
@@ -343,10 +346,11 @@ describe("reference ASR worker handler", () => {
         ],
         provider: "mock-asr",
         scriptId: expect.any(String),
+        structureNodeId: expect.any(String),
       },
     });
 
-    const output = result.output as { scriptId: string };
+    const output = result.output as { scriptId: string; structureNodeId: string };
     const referenceSource = await prisma.referenceSource.findUnique({
       where: { id: referenceSourceId },
       include: {
@@ -381,6 +385,29 @@ describe("reference ASR worker handler", () => {
     expect(referenceSource?.transcriptScript?.asrSegments).toEqual([
       expect.objectContaining({ startMs: 0, endMs: 1200, text: "欢迎来到" }),
       expect.objectContaining({ startMs: 1200, endMs: 2200, text: "VoFlow" }),
+    ]);
+
+    const structureNode = await prisma.workflowNode.findUnique({
+      where: { id: output.structureNodeId },
+    });
+    expect(structureNode).toMatchObject({
+      jobId,
+      nodeType: "reference_extract",
+      status: "queued",
+      version: 1,
+      input: {
+        sourceType: "reference_structure",
+        referenceSourceId,
+      },
+    });
+    expect(queue.getQueue()).toEqual([
+      {
+        jobId,
+        nodeId: output.structureNodeId,
+        nodeType: "reference_extract",
+        version: 1,
+        traceId: "trace-reference-structure-next",
+      },
     ]);
   });
 

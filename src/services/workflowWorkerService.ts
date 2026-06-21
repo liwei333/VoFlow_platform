@@ -7,6 +7,7 @@ import { createRiskWorkflowNodeHandler } from "@/services/scriptRiskWorkerServic
 import { createRewriteWorkflowNodeHandler } from "@/services/scriptRewriteWorkerService";
 import { createTitleWorkflowNodeHandler } from "@/services/scriptTitleWorkerService";
 import { createReferenceAsrWorkflowNodeHandler } from "@/services/referenceAsrService";
+import { createReferenceStructureWorkflowNodeHandler } from "@/services/referenceStructureWorkerService";
 
 export const WORKFLOW_NODE_EXECUTION_FAILED = "WORKFLOW_NODE_EXECUTION_FAILED";
 
@@ -125,13 +126,31 @@ const prismaWorkflowNodeExecutionRepository: WorkflowNodeExecutionRepository = {
 };
 
 export function createDefaultWorkflowNodeHandlers(): WorkflowNodeHandlers {
+  const referenceAsrHandler = createReferenceAsrWorkflowNodeHandler();
+  const referenceStructureHandler = createReferenceStructureWorkflowNodeHandler();
+
   return {
-    reference_extract: createReferenceAsrWorkflowNodeHandler(),
+    reference_extract: async (input) => {
+      if (isReferenceStructureNodeInput(input.input)) {
+        return referenceStructureHandler(input);
+      }
+
+      return referenceAsrHandler(input);
+    },
     script_prepare: createAsrWorkflowNodeHandler(),
     script_rewrite: createRewriteWorkflowNodeHandler(),
     script_title: createTitleWorkflowNodeHandler(),
     legal_review: createRiskWorkflowNodeHandler(),
   };
+}
+
+function isReferenceStructureNodeInput(input: unknown): boolean {
+  return (
+    Boolean(input) &&
+    typeof input === "object" &&
+    !Array.isArray(input) &&
+    (input as { sourceType?: unknown }).sourceType === "reference_structure"
+  );
 }
 
 const defaultExecuteWorkflowNodeDependencies: ExecuteWorkflowNodeDependencies = {

@@ -4,7 +4,7 @@ import { requireAuth } from "@/lib/api-auth";
 import { success } from "@/lib/api-response";
 import { serializeAsset } from "@/lib/assets/serializer";
 import { validateAsset } from "@/lib/assets/validation";
-import { uploadAsset, deleteAsset, ensureBucketExists } from "@/lib/storage";
+import { uploadAsset, deleteAsset, ensureBucketExists, getMinioDiagnostics } from "@/lib/storage";
 import { writeAuditLog } from "@/lib/audit-log";
 import { AssetType } from "@prisma/client";
 import { z } from "zod";
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     try {
       await ensureBucketExists();
     } catch (error) {
-      console.error("Bucket initialization error:", error);
+      console.error("Bucket initialization error:", getMinioDiagnostics(error));
       return NextResponse.json(
         {
           code: "STORAGE_ERROR",
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
         sizeBytes
       );
     } catch (error) {
-      console.error("MinIO upload error:", error);
+      console.error("MinIO upload error:", getMinioDiagnostics(error));
       return NextResponse.json(
         {
           code: "STORAGE_ERROR",

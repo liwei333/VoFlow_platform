@@ -4,7 +4,9 @@ import { createSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { POST as createFromAsset } from "@/app/api/projects/[projectId]/references/from-asset/route";
 import { POST as createFromUrl } from "@/app/api/projects/[projectId]/references/from-url/route";
+import { GET as listReferences } from "@/app/api/projects/[projectId]/references/route";
 import { GET as getReference } from "@/app/api/references/[referenceSourceId]/route";
+import { POST as retryReference } from "@/app/api/references/[referenceSourceId]/retry/route";
 import {
   DEFAULT_REFERENCE_LINK_PARSERS,
   type ReferenceLinkParser,
@@ -342,6 +344,111 @@ describe("Reference source API", () => {
     });
   });
 
+  it("lists project reference sources with transcript, structure, asset name, and team isolation", async () => {
+    const transcriptScript = await prisma.script.create({
+      data: {
+        projectId,
+        sourceType: "asr",
+        content: "历史参考转写内容",
+        version: 1,
+        status: "draft",
+      },
+    });
+    const olderReferenceSource = await prisma.referenceSource.create({
+      data: {
+        projectId,
+        teamId,
+        sourceType: "asset",
+        assetId: audioAssetId,
+        status: "succeeded",
+        durationMs: 15_000,
+        transcriptScriptId: transcriptScript.id,
+        structureJson: {
+          hook: "历史参考转写内容",
+        },
+        createdAt: new Date("2026-06-20T08:00:00.000Z"),
+      },
+    });
+    const newerReferenceSource = await prisma.referenceSource.create({
+      data: {
+        projectId,
+        teamId,
+        sourceType: "url",
+        platform: "douyin",
+        sourceUrl: "https://www.douyin.com/video/newer",
+        status: "failed",
+        errorJson: {
+          code: "REFERENCE_PARSE_FAILED",
+          message: "链接解析失败",
+        },
+        createdAt: new Date("2026-06-20T09:00:00.000Z"),
+      },
+    });
+    const otherProjectReferenceSource = await prisma.referenceSource.create({
+      data: {
+        projectId: otherProjectId,
+        teamId: otherTeamId,
+        sourceType: "url",
+        sourceUrl: "https://www.douyin.com/video/other-project",
+        status: "succeeded",
+      },
+    });
+    referenceSourceIds.push(
+      olderReferenceSource.id,
+      newerReferenceSource.id,
+      otherProjectReferenceSource.id
+    );
+
+    const response = await listReferences(
+      await createAuthenticatedRequest(`/api/projects/${projectId}/references`),
+      { params: Promise.resolve({ projectId }) }
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      code: "SUCCESS",
+      data: {
+        references: [
+          {
+            id: newerReferenceSource.id,
+            projectId,
+            teamId,
+            sourceType: "url",
+            platform: "douyin",
+            sourceUrl: "https://www.douyin.com/video/newer",
+            status: "failed",
+            errorJson: {
+              code: "REFERENCE_PARSE_FAILED",
+            },
+            transcript: null,
+            asset: null,
+          },
+          {
+            id: olderReferenceSource.id,
+            projectId,
+            teamId,
+            sourceType: "asset",
+            assetId: audioAssetId,
+            status: "succeeded",
+            transcript: "历史参考转写内容",
+            structureJson: {
+              hook: "历史参考转写内容",
+            },
+            asset: {
+              id: audioAssetId,
+              name: "reference-api.wav",
+              type: "audio",
+            },
+          },
+        ],
+      },
+    });
+    expect(body.data.references.map((source: { id: string }) => source.id)).not.toContain(
+      otherProjectReferenceSource.id
+    );
+  });
+
   it("does not expose reference sources from another team", async () => {
     const otherReferenceSource = await prisma.referenceSource.create({
       data: {
@@ -361,7 +468,214 @@ describe("Reference source API", () => {
     expect(response.status).toBe(404);
   });
 
-  async function createAuthenticatedRequest(path: string, body?: unknown): Promise<NextRequest> {
+  it("retries a failed asset reference on the same reference source", async () => {
+    const failedReferenceSource = await prisma.referenceSource.create({
+      data: {
+        projectId,
+        teamId,
+        sourceType: "asset",
+        assetId: audioAssetId,
+        status: "failed",
+        durationMs: 15_000,
+        errorJson: {
+          code: "REFERENCE_ASR_FAILED",
+          message: "ASR 转写失败",
+        },
+      },
+    });
+    referenceSourceIds.push(failedReferenceSource.id);
+
+    const response = await retryReference(
+      await createAuthenticatedRequest(
+        `/api/references/${failedReferenceSource.id}/retry`,
+        undefined,
+        "POST"
+      ),
+      { params: Promise.resolve({ referenceSourceId: failedReferenceSource.id }) }
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      code: "SUCCESS",
+      message: "参考来源重试任务已创建",
+      data: {
+        referenceSource: {
+          id: failedReferenceSource.id,
+          projectId,
+          teamId,
+          sourceType: "asset",
+          assetId: audioAssetId,
+          status: "transcribing",
+          errorJson: null,
+        },
+        job: {
+          projectId,
+          teamId,
+          ownerId: userId,
+          currentNode: "reference_extract",
+        },
+        node: {
+          nodeType: "reference_extract",
+          status: "queued",
+          input: {
+            sourceType: "asset",
+            projectId,
+            teamId,
+            referenceSourceId: failedReferenceSource.id,
+            assetId: audioAssetId,
+            assetType: "audio",
+          },
+        },
+      },
+    });
+    jobIds.push(body.data.job.id);
+    await expect(
+      prisma.referenceSource.count({
+        where: {
+          projectId,
+          teamId,
+        },
+      })
+    ).resolves.toBe(1);
+  });
+
+  it("rejects retry for reference sources that are not failed", async () => {
+    const referenceSource = await prisma.referenceSource.create({
+      data: {
+        projectId,
+        teamId,
+        sourceType: "asset",
+        assetId: audioAssetId,
+        status: "transcribing",
+        durationMs: 15_000,
+      },
+    });
+    referenceSourceIds.push(referenceSource.id);
+
+    const response = await retryReference(
+      await createAuthenticatedRequest(`/api/references/${referenceSource.id}/retry`, undefined, "POST"),
+      { params: Promise.resolve({ referenceSourceId: referenceSource.id }) }
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      code: "REFERENCE_RETRY_NOT_ALLOWED",
+      message: "仅失败的参考来源可以重试",
+    });
+  });
+
+  it("retries a failed URL reference on the same reference source", async () => {
+    const originalParser = DEFAULT_REFERENCE_LINK_PARSERS.douyin;
+    const parser: ReferenceLinkParser = {
+      parse: vi.fn().mockResolvedValue({
+        title: "重试后的结构",
+        durationMs: 22_000,
+        raw: {
+          structure: {
+            hook: "重试后开头",
+          },
+        },
+      }),
+    };
+    DEFAULT_REFERENCE_LINK_PARSERS.douyin = parser;
+
+    try {
+      const failedReferenceSource = await prisma.referenceSource.create({
+        data: {
+          projectId,
+          teamId,
+          sourceType: "url",
+          platform: "douyin",
+          sourceUrl: "https://www.douyin.com/video/retry",
+          status: "failed",
+          errorJson: {
+            code: "REFERENCE_PARSE_FAILED",
+            message: "链接解析失败",
+          },
+        },
+      });
+      referenceSourceIds.push(failedReferenceSource.id);
+
+      const response = await retryReference(
+        await createAuthenticatedRequest(
+          `/api/references/${failedReferenceSource.id}/retry`,
+          undefined,
+          "POST"
+        ),
+        { params: Promise.resolve({ referenceSourceId: failedReferenceSource.id }) }
+      );
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toMatchObject({
+        code: "SUCCESS",
+        message: "参考链接已重新解析",
+        data: {
+          referenceSource: {
+            id: failedReferenceSource.id,
+            projectId,
+            teamId,
+            sourceType: "url",
+            platform: "douyin",
+            sourceUrl: "https://www.douyin.com/video/retry",
+            status: "succeeded",
+            durationMs: 22_000,
+            errorJson: null,
+            structureJson: {
+              title: "重试后的结构",
+              raw: {
+                structure: {
+                  hook: "重试后开头",
+                },
+              },
+            },
+          },
+        },
+      });
+      await expect(
+        prisma.referenceSource.count({
+          where: {
+            projectId,
+            teamId,
+          },
+        })
+      ).resolves.toBe(1);
+      expect(parser.parse).toHaveBeenCalledOnce();
+    } finally {
+      DEFAULT_REFERENCE_LINK_PARSERS.douyin = originalParser;
+    }
+  });
+
+  it("does not retry reference sources from another team", async () => {
+    const otherReferenceSource = await prisma.referenceSource.create({
+      data: {
+        projectId: otherProjectId,
+        teamId: otherTeamId,
+        sourceType: "url",
+        sourceUrl: "https://www.douyin.com/video/other-retry",
+        status: "failed",
+      },
+    });
+    referenceSourceIds.push(otherReferenceSource.id);
+
+    const response = await retryReference(
+      await createAuthenticatedRequest(
+        `/api/references/${otherReferenceSource.id}/retry`,
+        undefined,
+        "POST"
+      ),
+      { params: Promise.resolve({ referenceSourceId: otherReferenceSource.id }) }
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  async function createAuthenticatedRequest(
+    path: string,
+    body?: unknown,
+    method = body === undefined ? "GET" : "POST"
+  ): Promise<NextRequest> {
     const token = await createSessionToken({
       userId,
       teamId,
@@ -370,7 +684,7 @@ describe("Reference source API", () => {
     });
 
     return new NextRequest(`http://localhost:3000${path}`, {
-      method: body === undefined ? "GET" : "POST",
+      method,
       headers: {
         "Content-Type": "application/json",
         cookie: `session=${token}`,

@@ -98,6 +98,11 @@ type ReferenceSource = {
   transcript?: string | null;
   structureJson: unknown;
   errorJson: unknown;
+  asset?: {
+    id: string;
+    name: string;
+    type: string;
+  } | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -143,6 +148,7 @@ export default function ScriptsPage() {
   const [creatingTranscription, setCreatingTranscription] = useState(false);
   const [creatingReferenceFromAsset, setCreatingReferenceFromAsset] = useState(false);
   const [creatingReferenceFromUrl, setCreatingReferenceFromUrl] = useState(false);
+  const [retryingReferenceSourceId, setRetryingReferenceSourceId] = useState<string | null>(null);
   const [approvingCandidateId, setApprovingCandidateId] = useState<string | null>(null);
   const [riskConfirmations, setRiskConfirmations] = useState<Record<string, boolean>>({});
   const [selectedAssetId, setSelectedAssetId] = useState("");
@@ -294,6 +300,28 @@ export default function ScriptsPage() {
     }
   }, []);
 
+  const fetchProjectReferences = useCallback(async (projectId: string) => {
+    if (!projectId) {
+      setReferenceSources([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/references`);
+      const body = (await response.json()) as ApiResponse<{ references: ReferenceSource[] }>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setReferenceSources([]);
+        return;
+      }
+
+      setReferenceSources(body.data.references);
+    } catch (error) {
+      console.error("Failed to fetch project references:", error);
+      setReferenceSources([]);
+    }
+  }, []);
+
   const mergeReferenceSource = useCallback((nextReferenceSource: ReferenceSource) => {
     setReferenceSources((current) => {
       const existingIndex = current.findIndex((source) => source.id === nextReferenceSource.id);
@@ -332,9 +360,9 @@ export default function ScriptsPage() {
   useEffect(() => {
     fetchProjectScripts(selectedProjectId);
     fetchProjectJobs(selectedProjectId);
+    fetchProjectReferences(selectedProjectId);
     setRiskConfirmations({});
-    setReferenceSources([]);
-  }, [fetchProjectJobs, fetchProjectScripts, selectedProjectId]);
+  }, [fetchProjectJobs, fetchProjectReferences, fetchProjectScripts, selectedProjectId]);
 
   useEffect(() => {
     const activeReferenceSourceIds = referenceSources
@@ -478,6 +506,7 @@ export default function ScriptsPage() {
       setSelectedJobId(body.data.job.id);
       setNoticeMessage("参考素材提取任务已创建");
       await fetchProjectJobs(selectedProjectId);
+      await fetchProjectReferences(selectedProjectId);
     } catch (error) {
       console.error("Failed to create reference task from asset:", error);
       setErrorMessage("参考素材提取任务创建失败");
@@ -533,6 +562,7 @@ export default function ScriptsPage() {
       mergeReferenceSource(body.data.referenceSource);
       setReferenceLink("");
       setNoticeMessage("参考链接已解析");
+      await fetchProjectReferences(selectedProjectId);
     } catch (error) {
       console.error("Failed to create reference source from URL:", error);
       setErrorMessage("参考链接解析失败，建议上传视频/音频继续提取。");
@@ -541,14 +571,40 @@ export default function ScriptsPage() {
     }
   }
 
-  function retryReferenceSource(source: ReferenceSource) {
-    if (source.assetId) {
-      createReferenceFromAsset(source.assetId);
-      return;
-    }
+  async function retryReferenceSource(source: ReferenceSource) {
+    setRetryingReferenceSourceId(source.id);
+    setErrorMessage("");
+    setNoticeMessage("");
 
-    if (source.sourceUrl) {
-      createReferenceFromUrl(source.sourceUrl);
+    try {
+      const response = await fetch(`/api/references/${source.id}/retry`, {
+        method: "POST",
+      });
+      const body = (await response.json()) as ApiResponse<{
+        referenceSource?: ReferenceSource;
+        job?: WorkflowJob;
+        fallback?: { message?: string };
+      }>;
+
+      if (body.code !== "SUCCESS" || !body.data?.referenceSource) {
+        const fallbackMessage = body.data?.fallback?.message || "";
+        setErrorMessage([body.message || "参考来源重试失败", fallbackMessage].filter(Boolean).join(" "));
+        await fetchProjectReferences(selectedProjectId);
+        return;
+      }
+
+      mergeReferenceSource(body.data.referenceSource);
+      if (body.data.job) {
+        setSelectedJobId(body.data.job.id);
+      }
+      setNoticeMessage(body.message || "参考来源已重试");
+      await fetchProjectJobs(selectedProjectId);
+      await fetchProjectReferences(selectedProjectId);
+    } catch (error) {
+      console.error("Failed to retry reference source:", error);
+      setErrorMessage("参考来源重试失败");
+    } finally {
+      setRetryingReferenceSourceId(null);
     }
   }
 
@@ -609,6 +665,7 @@ export default function ScriptsPage() {
             onClick={() => {
               fetchProjectScripts(selectedProjectId);
               fetchProjectJobs(selectedProjectId);
+              fetchProjectReferences(selectedProjectId);
               fetchLocalModelServices();
             }}
             disabled={!selectedProjectId || loadingScripts}
@@ -794,6 +851,7 @@ export default function ScriptsPage() {
                   <ReferenceSourceRow
                     key={source.id}
                     source={source}
+                    retrying={retryingReferenceSourceId === source.id}
                     onRetry={retryReferenceSource}
                   />
                 ))}
@@ -873,19 +931,21 @@ function SummaryCell({ label, value }: { label: string; value: number }) {
 
 function ReferenceSourceRow({
   source,
+  retrying,
   onRetry,
 }: {
   source: ReferenceSource;
+  retrying: boolean;
   onRetry: (source: ReferenceSource) => void;
 }) {
   const statusView = getReferenceSourceStatusView(source.status);
   const sourceLabel =
     source.sourceType === "asset"
-      ? "素材参考"
+      ? source.asset?.name || "素材参考"
       : source.platform
         ? `${source.platform} 链接`
         : "参考链接";
-  const canRetry = source.status === "failed" && Boolean(source.assetId || source.sourceUrl);
+  const hasRetryTarget = source.status === "failed" && Boolean(source.assetId || source.sourceUrl);
   const structureText = source.structureJson
     ? JSON.stringify(source.structureJson, null, 2)
     : "";
@@ -907,13 +967,14 @@ function ReferenceSourceRow({
             {source.sourceUrl || source.assetId || source.id}
           </div>
         </div>
-        {canRetry && (
+        {hasRetryTarget && (
           <button
             type="button"
             onClick={() => onRetry(source)}
-            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            disabled={retrying}
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            重试提取
+            {retrying ? "重试中..." : "重试提取"}
           </button>
         )}
       </div>

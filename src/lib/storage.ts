@@ -10,6 +10,16 @@ const MINIO_USE_SSL = process.env.MINIO_USE_SSL === 'true';
 
 let minioClient: Client | null = null;
 
+export function getMinioDiagnostics(error?: unknown) {
+  return {
+    endpoint: MINIO_ENDPOINT,
+    port: MINIO_PORT,
+    bucket: MINIO_BUCKET,
+    useSSL: MINIO_USE_SSL,
+    errorMessage: error instanceof Error ? error.message : String(error ?? ''),
+  };
+}
+
 export function getMinioClient(): Client {
   if (!minioClient) {
     minioClient = new Client({

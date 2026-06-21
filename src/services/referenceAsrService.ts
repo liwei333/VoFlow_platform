@@ -184,6 +184,8 @@ export interface ReferenceAsrWorkflowNodeHandlerDependencies {
   storage: AsrMediaStorage;
   registry: AsrServiceRegistry;
   provider: AsrProvider;
+  queue: WorkflowQueueEnqueuer;
+  createTraceId: () => string;
 }
 
 interface ReferenceAsrWorkflowNodeInput {
@@ -240,12 +242,14 @@ const defaultReferenceAsrWorkflowNodeHandlerDependencies: ReferenceAsrWorkflowNo
   storage: referenceObjectStorage,
   registry: prismaReferenceAsrServiceRegistry,
   provider: mockReferenceAsrProvider,
+  queue: workflowQueue,
+  createTraceId: createWorkflowTraceId,
 };
 
 export function createReferenceAsrWorkflowNodeHandler(
   dependencies: Partial<ReferenceAsrWorkflowNodeHandlerDependencies> = {}
 ): WorkflowNodeHandler {
-  const { storage, registry, provider } = {
+  const { storage, registry, provider, queue, createTraceId } = {
     ...defaultReferenceAsrWorkflowNodeHandlerDependencies,
     ...dependencies,
   };
@@ -267,7 +271,7 @@ export function createReferenceAsrWorkflowNodeHandler(
         durationMs: parsedInput.durationMs,
         traceId: payload.traceId,
       });
-      const script = await saveReferenceAsrTranscriptionResult({
+      const resultAfterSave = await saveReferenceAsrTranscriptionResult({
         jobId: payload.jobId,
         referenceSourceId: parsedInput.referenceSourceId,
         projectId: parsedInput.projectId,
@@ -277,6 +281,14 @@ export function createReferenceAsrWorkflowNodeHandler(
         text: result.text,
         segments: result.segments,
         provider: result.provider,
+      });
+
+      await queue.enqueue({
+        jobId: payload.jobId,
+        nodeId: resultAfterSave.structureNode.id,
+        nodeType: REFERENCE_EXTRACT_NODE_TYPE,
+        version: resultAfterSave.structureNode.version,
+        traceId: createTraceId(),
       });
 
       return {
@@ -289,7 +301,8 @@ export function createReferenceAsrWorkflowNodeHandler(
           text: result.text,
           segments: result.segments,
           provider: result.provider,
-          scriptId: script.id,
+          scriptId: resultAfterSave.script.id,
+          structureNodeId: resultAfterSave.structureNode.id,
         },
       };
     } catch (error) {
@@ -317,7 +330,13 @@ interface SaveReferenceAsrTranscriptionResultInput {
 
 async function saveReferenceAsrTranscriptionResult(
   input: SaveReferenceAsrTranscriptionResultInput
-): Promise<{ id: string }> {
+): Promise<{
+  script: { id: string };
+  structureNode: {
+    id: string;
+    version: number;
+  };
+}> {
   return prisma.$transaction(async (tx) => {
     const script = await tx.script.create({
       data: {
@@ -358,7 +377,27 @@ async function saveReferenceAsrTranscriptionResult(
       },
     });
 
-    return script;
+    const structureNode = await tx.workflowNode.create({
+      data: {
+        jobId: input.jobId,
+        nodeType: REFERENCE_EXTRACT_NODE_TYPE,
+        status: "queued",
+        version: 1,
+        input: toPrismaJson({
+          sourceType: "reference_structure",
+          referenceSourceId: input.referenceSourceId,
+        }),
+      },
+      select: {
+        id: true,
+        version: true,
+      },
+    });
+
+    return {
+      script,
+      structureNode,
+    };
   });
 }
 
