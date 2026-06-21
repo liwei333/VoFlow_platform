@@ -1,0 +1,39 @@
+export type ReferenceSourceStatus =
+  | "pending"
+  | "parsing"
+  | "transcribing"
+  | "analyzing"
+  | "succeeded"
+  | "failed";
+
+export type ReferenceSourceViewModel = {
+  id: string;
+  projectId: string;
+  teamId: string;
+  sourceType: string;
+  platform: string | null;
+  sourceUrl: string | null;
+  assetId: string | null;
+  status: ReferenceSourceStatus | string;
+  durationMs: number | null;
+  transcript?: string | null;
+  structureJson: unknown;
+  errorJson: unknown;
+  asset?: {
+    id: string;
+    name: string;
+    type: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ReferenceMediaAssetViewModel = {
+  id: string;
+  type: "audio" | "video" | string;
+  name: string;
+  fileName: string;
+  metadata: unknown;
+  licenseStatus: string;
+  createdAt: string;
+};

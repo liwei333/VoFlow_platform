@@ -1,5 +1,8 @@
 import { detectReferencePlatform, ReferencePlatformError } from "@/lib/references/platforms";
 import { isReferenceMediaAssetType } from "@/lib/references/assets";
+import type { AssetUsageScope } from "@/lib/assets/ui";
+
+export const REFERENCE_UPLOAD_USAGE_SCOPE: AssetUsageScope = "video_generation";
 
 export type ReferenceSourceStatus =
   | "pending"

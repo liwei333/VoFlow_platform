@@ -81,10 +81,69 @@ async function main() {
     });
   }
 
+  const presetVoices = [
+    {
+      id: "preset-voice-clear-female",
+      name: "清亮女声",
+      provider: "mock",
+      modelId: "preset-clear-female",
+      sampleUrl: "/samples/voices/clear-female.mp3",
+      gender: "female",
+      style: "clear",
+      language: "zh-CN",
+    },
+    {
+      id: "preset-voice-warm-male",
+      name: "温和男声",
+      provider: "mock",
+      modelId: "preset-warm-male",
+      sampleUrl: "/samples/voices/warm-male.mp3",
+      gender: "male",
+      style: "warm",
+      language: "zh-CN",
+    },
+    {
+      id: "preset-voice-energetic-female",
+      name: "活力女声",
+      provider: "mock",
+      modelId: "preset-energetic-female",
+      sampleUrl: "/samples/voices/energetic-female.mp3",
+      gender: "female",
+      style: "energetic",
+      language: "zh-CN",
+    },
+  ];
+
+  for (const voice of presetVoices) {
+    await prisma.voice.upsert({
+      where: { id: voice.id },
+      update: {
+        name: voice.name,
+        provider: voice.provider,
+        modelId: voice.modelId,
+        sampleUrl: voice.sampleUrl,
+        gender: voice.gender,
+        style: voice.style,
+        language: voice.language,
+        status: "active",
+        licenseStatus: "approved",
+      },
+      create: {
+        ...voice,
+        teamId: null,
+        ownerId: null,
+        voiceType: "preset",
+        status: "active",
+        licenseStatus: "approved",
+      },
+    });
+  }
+
   console.log("Seed completed:");
   console.log("- Dev user: dev@voflow.local / dev123456");
   console.log("- Disabled user: disabled@voflow.local / disabled123");
   console.log("- Local model services:", localModelServices.map((service) => service.type).join(", "));
+  console.log("- Preset voices:", presetVoices.map((voice) => voice.name).join(", "));
 }
 
 main()

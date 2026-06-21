@@ -110,6 +110,24 @@ enum ScriptCandidateStatus {
   rejected
 }
 
+enum VoiceType {
+  preset
+  cloned
+}
+
+enum VoiceStatus {
+  active
+  disabled
+}
+
+enum TtsRequestStatus {
+  queued
+  processing
+  succeeded
+  failed
+  waiting_approval
+}
+
 enum ReferenceSourceType {
   url
   asset
@@ -205,6 +223,7 @@ model User {
   assetConsents   AssetConsent[]
   auditLogs       AuditLog[]
   videoJobs       VideoJob[]     @relation("VideoJobOwner")
+  ownedVoices     Voice[]        @relation("VoiceOwner")
 
   @@map("users")
 }
@@ -221,6 +240,7 @@ model Team {
   projects         Project[]
   videoJobs        VideoJob[]
   referenceSources ReferenceSource[]
+  voices           Voice[]
 
   @@map("teams")
 }
@@ -278,6 +298,7 @@ model VideoJob {
   nodes     WorkflowNode[]
   artifacts Artifact[]
   scripts   Script[]
+  ttsRequests TtsRequest[]
 
   @@index([projectId])
   @@index([teamId, createdAt])
@@ -305,6 +326,7 @@ model WorkflowNode {
 
   job       VideoJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
   artifacts Artifact[]
+  ttsRequests TtsRequest[]
 
   @@index([jobId])
   @@index([jobId, nodeType])
@@ -324,6 +346,7 @@ model Artifact {
 
   job  VideoJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
   node WorkflowNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  ttsRequests TtsRequest[]
 
   @@index([jobId])
   @@index([nodeId])
@@ -415,10 +438,72 @@ model ScriptCandidate {
   updatedAt       DateTime              @updatedAt
 
   script Script @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  ttsRequests TtsRequest[]
 
   @@index([scriptId])
   @@index([status])
   @@map("script_candidates")
+}
+
+model Voice {
+  id            String        @id @default(cuid())
+  teamId        String?
+  ownerId       String?
+  voiceType     VoiceType     @default(preset)
+  name          String
+  provider      String
+  modelId       String
+  status        VoiceStatus   @default(active)
+  licenseStatus LicenseStatus @default(approved)
+  sampleUrl     String?
+  gender        String?
+  style         String?
+  language      String?
+  metadata      Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  team        Team?        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner       User?        @relation("VoiceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  ttsRequests TtsRequest[]
+
+  @@index([teamId, createdAt])
+  @@index([teamId, status])
+  @@index([voiceType])
+  @@index([licenseStatus])
+  @@map("voices")
+}
+
+model TtsRequest {
+  id                String           @id @default(cuid())
+  jobId             String
+  nodeId            String?
+  voiceId           String
+  scriptCandidateId String
+  speed             Float            @default(1.0)
+  pitch             Float            @default(0)
+  pauseJson         Json?
+  provider          String
+  providerRequestId String?
+  status            TtsRequestStatus @default(queued)
+  audioArtifactId   String?
+  errorJson         Json?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  job             VideoJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  node            WorkflowNode?   @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  voice           Voice           @relation(fields: [voiceId], references: [id])
+  scriptCandidate ScriptCandidate @relation(fields: [scriptCandidateId], references: [id], onDelete: Cascade)
+  audioArtifact   Artifact?       @relation(fields: [audioArtifactId], references: [id], onDelete: SetNull)
+
+  @@index([jobId])
+  @@index([nodeId])
+  @@index([voiceId])
+  @@index([scriptCandidateId])
+  @@index([status])
+  @@map("tts_requests")
 }
 
 model AsrSegment {
