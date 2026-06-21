@@ -4,6 +4,7 @@ import { uploadJobArtifact } from "@/lib/storage";
 import {
   TTS_AUDIO_ARTIFACT_TYPE,
   TTS_ERROR_CODES,
+  TTS_LOCAL_PROVIDER,
   TTS_NODE_TYPE,
 } from "@/lib/tts/constants";
 import { ttsParamsSchema } from "@/lib/tts/validation";
@@ -14,19 +15,26 @@ import {
   createTtsProvider,
   inspectTtsAudio,
   TtsProviderError,
+  type LocalTtsServiceConfig,
   type TtsProvider,
 } from "@/services/ttsProviderService";
 
-export type TtsProviderFactory = (provider: string) => TtsProvider;
+export type TtsProviderFactory = (
+  provider: string,
+  localService?: LocalTtsServiceConfig | null
+) => TtsProvider;
+export type TtsLocalServiceReader = () => Promise<LocalTtsServiceConfig | null>;
 
 export interface TtsWorkflowNodeHandlerDependencies {
   providerFactory: TtsProviderFactory;
+  readLocalTtsService: TtsLocalServiceReader;
   uploadArtifact: typeof uploadJobArtifact;
   writeArtifact: typeof writeWorkflowArtifact;
 }
 
 const defaultTtsWorkflowNodeHandlerDependencies: TtsWorkflowNodeHandlerDependencies = {
   providerFactory: createTtsProvider,
+  readLocalTtsService: readRegisteredLocalTtsService,
   uploadArtifact: uploadJobArtifact,
   writeArtifact: writeWorkflowArtifact,
 };
@@ -34,7 +42,7 @@ const defaultTtsWorkflowNodeHandlerDependencies: TtsWorkflowNodeHandlerDependenc
 export function createTtsWorkflowNodeHandler(
   dependencies: Partial<TtsWorkflowNodeHandlerDependencies> = {}
 ): WorkflowNodeHandler {
-  const { providerFactory, uploadArtifact, writeArtifact } = {
+  const { providerFactory, readLocalTtsService, uploadArtifact, writeArtifact } = {
     ...defaultTtsWorkflowNodeHandlerDependencies,
     ...dependencies,
   };
@@ -80,7 +88,9 @@ export function createTtsWorkflowNodeHandler(
       data: { status: "processing", errorJson: Prisma.JsonNull },
     });
 
-    const provider = providerFactory(ttsRequest.provider);
+    const localTtsService =
+      ttsRequest.provider === TTS_LOCAL_PROVIDER ? await readLocalTtsService() : undefined;
+    const provider = providerFactory(ttsRequest.provider, localTtsService);
     const providerOutput = inspectTtsAudio(
       await provider.synthesize({
         text: ttsRequest.scriptCandidate.content,
@@ -132,6 +142,19 @@ export function createTtsWorkflowNodeHandler(
       },
     };
   };
+}
+
+async function readRegisteredLocalTtsService(): Promise<LocalTtsServiceConfig | null> {
+  return prisma.localModelService.findUnique({
+    where: {
+      serviceType: "tts",
+    },
+    select: {
+      baseUrl: true,
+      status: true,
+      modelName: true,
+    },
+  });
 }
 
 function parseTtsNodeInput(input: unknown): { ttsRequestId: string } {

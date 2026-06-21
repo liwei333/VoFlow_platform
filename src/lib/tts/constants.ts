@@ -28,6 +28,8 @@ export const TTS_NODE_TYPE = "tts";
 export const TTS_AUDIO_ARTIFACT_TYPE = "audio";
 export const TTS_MOCK_PROVIDER = "mock";
 export const TTS_LOCAL_PROVIDER = "local";
+export const TTS_LOCAL_SYNTHESIZE_PATH = "/synthesize";
+export const TTS_LOCAL_TIMEOUT_MS = 30_000;
 
 export const TTS_SPEED_RANGE = {
   min: 0.5,
