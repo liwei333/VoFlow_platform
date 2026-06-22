@@ -44,6 +44,18 @@ describe("avatar photo quality analysis", () => {
     });
   });
 
+  it("does not pass photos without detector output", () => {
+    const report = analyzeAvatarPhotoQuality(baseMetadata);
+
+    expect(report.passed).toBe(false);
+    expect(report.reasons).toEqual([
+      {
+        code: AVATAR_PHOTO_ERROR_CODES.detectorUnavailable,
+        message: "照片内容检测服务未接入，暂不能确认人脸、清晰度、遮挡和曝光",
+      },
+    ]);
+  });
+
   it("rejects photos without exactly one face", () => {
     expect(analyzeAvatarPhotoQuality(baseMetadata, { faceCount: 0 }).reasons).toEqual([
       {

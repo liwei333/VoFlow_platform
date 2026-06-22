@@ -64,13 +64,17 @@ const DEFAULT_DETECTION: CompleteAvatarPhotoDetection = {
 
 export function analyzeAvatarPhotoQuality(
   metadata: AvatarPhotoMetadata,
-  detection: AvatarPhotoDetection = DEFAULT_DETECTION
+  detection?: AvatarPhotoDetection
 ): AvatarPhotoQualityReport {
   const mergedDetection: CompleteAvatarPhotoDetection = {
     ...DEFAULT_DETECTION,
     ...detection,
   };
   const reasons: AvatarPhotoQualityReason[] = [];
+
+  if (!detection) {
+    reasons.push(reason(AVATAR_PHOTO_ERROR_CODES.detectorUnavailable));
+  }
 
   if (!metadata.resolutionPassed) {
     reasons.push(reason(AVATAR_PHOTO_ERROR_CODES.resolutionTooLow));

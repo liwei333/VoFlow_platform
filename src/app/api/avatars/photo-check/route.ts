@@ -14,6 +14,7 @@ import {
   AVATAR_PHOTO_ERROR_CODES,
   AVATAR_PHOTO_ERROR_MESSAGES,
 } from "@/lib/avatar/constants";
+import { detectAvatarPhotoContent } from "@/lib/avatar/detector";
 import { analyzeAvatarPhotoQuality } from "@/lib/avatar/quality";
 import {
   deleteAsset,
@@ -76,7 +77,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const qualityReport = analyzeAvatarPhotoQuality(photoMetadata);
+    const detection = await detectAvatarPhotoContent({
+      buffer,
+      fileName,
+      metadata: photoMetadata,
+    });
+    const qualityReport = analyzeAvatarPhotoQuality(photoMetadata, detection);
 
     try {
       await ensureBucketExists();

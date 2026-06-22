@@ -56,6 +56,22 @@ function formatDateTime(value: string | Date) {
   }).format(new Date(value));
 }
 
+export function getAvatarPreviewDisplay(
+  avatar: Pick<SerializedAvatar, "previewUrl" | "sourceAsset">
+) {
+  if (avatar.previewUrl) {
+    return {
+      imageUrl: avatar.previewUrl,
+      label: "数字人预览",
+    };
+  }
+
+  return {
+    imageUrl: avatar.sourceAsset.accessUrl,
+    label: "源照片",
+  };
+}
+
 export default function AvatarsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [avatars, setAvatars] = useState<SerializedAvatar[]>([]);
@@ -70,6 +86,7 @@ export default function AvatarsPage() {
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [defaultingAvatarId, setDefaultingAvatarId] = useState<string | null>(null);
   const [deletingAvatarId, setDeletingAvatarId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [noticeMessage, setNoticeMessage] = useState("");
@@ -234,6 +251,36 @@ export default function AvatarsPage() {
       setErrorMessage("数字人删除失败");
     } finally {
       setDeletingAvatarId(null);
+    }
+  }
+
+  async function setDefaultAvatar(avatar: SerializedAvatar) {
+    if (avatar.isDefault) {
+      return;
+    }
+
+    setDefaultingAvatarId(avatar.id);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(`/api/avatars/${avatar.id}/default`, {
+        method: "POST",
+      });
+      const body = (await response.json()) as ApiResponse<{ avatar: SerializedAvatar }>;
+
+      if (body.code !== "SUCCESS") {
+        setErrorMessage(body.message || "默认数字人设置失败");
+        return;
+      }
+
+      setNoticeMessage("默认数字人已更新");
+      await fetchAvatars();
+    } catch (error) {
+      console.error("Failed to set default avatar:", error);
+      setErrorMessage("默认数字人设置失败");
+    } finally {
+      setDefaultingAvatarId(null);
     }
   }
 
@@ -406,6 +453,7 @@ export default function AvatarsPage() {
                 <th className="px-5 py-3">状态</th>
                 <th className="px-5 py-3">授权</th>
                 <th className="px-5 py-3">创建时间</th>
+                <th className="px-5 py-3">设为默认</th>
                 <th className="px-5 py-3">删除</th>
               </tr>
             </thead>
@@ -413,15 +461,16 @@ export default function AvatarsPage() {
               {avatars.map((avatar) => {
                 const statusView = getAvatarStatusView(avatar.status);
                 const licenseView = getAvatarLicenseStatusView(avatar.licenseStatus);
+                const previewDisplay = getAvatarPreviewDisplay(avatar);
                 return (
                   <tr key={avatar.id}>
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        {avatar.previewUrl ? (
+                        {previewDisplay.imageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={avatar.previewUrl}
-                            alt={avatar.name}
+                            src={previewDisplay.imageUrl}
+                            alt={`${avatar.name} ${previewDisplay.label}`}
                             className="h-12 w-9 rounded object-cover ring-1 ring-gray-200"
                           />
                         ) : (
@@ -429,6 +478,7 @@ export default function AvatarsPage() {
                         )}
                         <div>
                           <div className="font-medium text-gray-900">{avatar.name}</div>
+                          <div className="mt-1 text-xs text-gray-500">{previewDisplay.label}</div>
                           <div className="mt-1 text-xs text-gray-500">{avatar.sourceAsset.name}</div>
                         </div>
                       </div>
@@ -445,6 +495,22 @@ export default function AvatarsPage() {
                     </td>
                     <td className="px-5 py-4 text-gray-500">{formatDateTime(avatar.createdAt)}</td>
                     <td className="px-5 py-4">
+                      {avatar.isDefault ? (
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+                          默认
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setDefaultAvatar(avatar)}
+                          disabled={defaultingAvatarId === avatar.id}
+                          className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {defaultingAvatarId === avatar.id ? "设置中" : "设为默认"}
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-5 py-4">
                       <button
                         type="button"
                         onClick={() => deleteAvatar(avatar)}
@@ -459,7 +525,7 @@ export default function AvatarsPage() {
               })}
               {!loading && avatars.length === 0 && (
                 <tr>
-                  <td className="px-5 py-10 text-center text-sm text-gray-500" colSpan={5}>
+                  <td className="px-5 py-10 text-center text-sm text-gray-500" colSpan={6}>
                     暂无数字人
                   </td>
                 </tr>

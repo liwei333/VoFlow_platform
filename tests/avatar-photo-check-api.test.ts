@@ -3,6 +3,8 @@ import { NextRequest } from "next/server";
 import { createSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
+const detectAvatarPhotoContentMock = vi.hoisted(() => vi.fn());
+
 vi.mock("@/lib/storage", () => ({
   ensureBucketExists: vi.fn().mockResolvedValue(undefined),
   uploadAsset: vi.fn().mockImplementation((teamId: string, assetId: string, fileName: string) =>
@@ -14,6 +16,14 @@ vi.mock("@/lib/storage", () => ({
   })),
   generatePresignedUrl: vi.fn().mockResolvedValue("signed://avatar-source"),
 }));
+
+vi.mock("@/lib/avatar/detector", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/avatar/detector")>("@/lib/avatar/detector");
+  return {
+    ...actual,
+    detectAvatarPhotoContent: detectAvatarPhotoContentMock,
+  };
+});
 
 import { POST } from "@/app/api/avatars/photo-check/route";
 
@@ -58,6 +68,8 @@ describe("POST /api/avatars/photo-check", () => {
         role: "member",
       },
     });
+
+    detectAvatarPhotoContentMock.mockResolvedValue(undefined);
   });
 
   afterEach(async () => {
@@ -89,7 +101,7 @@ describe("POST /api/avatars/photo-check", () => {
     });
   });
 
-  it("uploads an avatar_source asset and returns a quality report", async () => {
+  it("uploads an avatar_source asset and reports unavailable content detection", async () => {
     const response = await POST(await createAuthenticatedMultipartRequest());
 
     expect(response.status).toBe(200);
@@ -103,13 +115,18 @@ describe("POST /api/avatars/photo-check", () => {
           licenseStatus: "pending",
         },
         qualityReport: {
-          passed: true,
+          passed: false,
           faceCount: 1,
           resolution: {
             width: 1080,
             height: 1440,
           },
-          reasons: [],
+          reasons: [
+            {
+              code: "AVATAR_PHOTO_DETECTOR_UNAVAILABLE",
+              message: "照片内容检测服务未接入，暂不能确认人脸、清晰度、遮挡和曝光",
+            },
+          ],
         },
       },
     });
@@ -132,8 +149,152 @@ describe("POST /api/avatars/photo-check", () => {
         resolutionPassed: true,
       },
       qualityReport: {
-        passed: true,
+        passed: false,
         faceCount: 1,
+      },
+    });
+  });
+
+  it("uses detector output to pass a qualified avatar photo", async () => {
+    detectAvatarPhotoContentMock.mockResolvedValueOnce({
+      faceCount: 1,
+      faceBoxRatio: 0.48,
+      confidence: 0.99,
+      yaw: 1,
+      pitch: 2,
+      roll: 3,
+      blurScore: 180,
+      occlusion: "none",
+      exposure: "normal",
+    });
+
+    const response = await POST(await createAuthenticatedMultipartRequest());
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "SUCCESS",
+      data: {
+        qualityReport: {
+          passed: true,
+          faceCount: 1,
+          faceBoxRatio: 0.48,
+          confidence: 0.99,
+          yaw: 1,
+          pitch: 2,
+          roll: 3,
+          blurScore: 180,
+          occlusion: "none",
+          exposure: "normal",
+          reasons: [],
+        },
+      },
+    });
+
+    expect(detectAvatarPhotoContentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        buffer: expect.any(Buffer),
+        fileName: "avatar.png",
+        metadata: expect.objectContaining({
+          width: 1080,
+          height: 1440,
+          resolutionPassed: true,
+        }),
+      })
+    );
+  });
+
+  it("uses detector output to fail an unqualified avatar photo", async () => {
+    detectAvatarPhotoContentMock.mockResolvedValueOnce({
+      faceCount: 1,
+      yaw: 0,
+      pitch: 0,
+      roll: 0,
+      blurScore: 50,
+      occlusion: "mask",
+      exposure: "overexposed",
+    });
+
+    const response = await POST(await createAuthenticatedMultipartRequest());
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "SUCCESS",
+      data: {
+        qualityReport: {
+          passed: false,
+          faceCount: 1,
+          yaw: 0,
+          pitch: 0,
+          roll: 0,
+          blurScore: 50,
+          occlusion: "mask",
+          exposure: "overexposed",
+          reasons: [
+            {
+              code: "AVATAR_PHOTO_BLURRY",
+              message: "照片清晰度不足，请重新拍摄或上传更清晰的照片",
+            },
+            {
+              code: "AVATAR_FACE_OCCLUDED",
+              message: "检测到脸部遮挡，请移除口罩、墨镜或其他遮挡物",
+            },
+            {
+              code: "AVATAR_PHOTO_EXPOSURE_INVALID",
+              message: "照片曝光异常，请上传光线均匀的照片",
+            },
+          ],
+        },
+      },
+    });
+  });
+
+  it("can use the mock detector for local demo photo checks", async () => {
+    detectAvatarPhotoContentMock.mockImplementationOnce(async (input) => {
+      const { mockAvatarPhotoDetector } = await vi.importActual<typeof import("@/lib/avatar/detector")>(
+        "@/lib/avatar/detector"
+      );
+      return mockAvatarPhotoDetector.detect(input);
+    });
+
+    const response = await POST(await createAuthenticatedMultipartRequest());
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "SUCCESS",
+      data: {
+        qualityReport: {
+          passed: true,
+          faceCount: 1,
+          reasons: [],
+        },
+      },
+    });
+  });
+
+  it("returns explicit quality reasons for invalid avatar photos", async () => {
+    const response = await POST(
+      await createAuthenticatedMultipartRequest({
+        file: new File([toArrayBuffer(pngBuffer(640, 960))], "low-resolution.png", { type: "image/png" }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "SUCCESS",
+      data: {
+        qualityReport: {
+          passed: false,
+          reasons: [
+            {
+              code: "AVATAR_PHOTO_DETECTOR_UNAVAILABLE",
+              message: "照片内容检测服务未接入，暂不能确认人脸、清晰度、遮挡和曝光",
+            },
+            {
+              code: "AVATAR_PHOTO_RESOLUTION_TOO_LOW",
+              message: "照片分辨率过低，请上传短边不低于 720px 的照片",
+            },
+          ],
+        },
       },
     });
   });

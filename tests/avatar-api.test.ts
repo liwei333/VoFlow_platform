@@ -5,6 +5,8 @@ import { createSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { POST as createAvatar, GET as listAvatars } from "@/app/api/avatars/route";
 import { DELETE as deleteAvatar } from "@/app/api/avatars/[avatarId]/route";
+import { POST as confirmAvatarConsent } from "@/app/api/avatars/[avatarId]/consents/route";
+import { POST as setDefaultAvatar } from "@/app/api/avatars/[avatarId]/default/route";
 
 const PASSED_QUALITY_REPORT = {
   passed: true,
@@ -148,6 +150,46 @@ describe("Avatar APIs", () => {
     });
   });
 
+  it("confirms portrait consent and makes a draft avatar selectable", async () => {
+    const avatar = await createPersistedAvatar("draft", null);
+
+    const response = await confirmAvatarConsent(
+      await createAuthenticatedJsonRequest({
+        consentText: "我确认拥有本人肖像授权并同意用于数字人生成和视频生成",
+        usageScope: ["avatar_generation", "video_generation"],
+        deviceJson: { userAgent: "vitest" },
+      }),
+      { params: Promise.resolve({ avatarId: avatar.id }) }
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      code: "SUCCESS",
+      data: {
+        avatar: {
+          id: avatar.id,
+          status: "ready",
+          licenseStatus: "approved",
+        },
+      },
+    });
+
+    const persistedConsent = await prisma.avatarConsent.findFirst({
+      where: { avatarId: avatar.id },
+    });
+    expect(persistedConsent).toMatchObject({
+      teamId,
+      userId,
+      consentType: "portrait_license",
+      usageScope: ["avatar_generation", "video_generation"],
+    });
+
+    const listResponse = await listAvatars(await createAuthenticatedGetRequest());
+    const listBody = await listResponse.json();
+    expect(listBody.data.avatars.map((item: { id: string }) => item.id)).toEqual([avatar.id]);
+  });
+
   it("lists only ready non-deleted avatars from the current team", async () => {
     const readyAvatar = await createPersistedAvatar("ready", null);
     await createPersistedAvatar("draft", null);
@@ -168,6 +210,135 @@ describe("Avatar APIs", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.data.avatars.map((avatar: { id: string }) => avatar.id)).toEqual([readyAvatar.id]);
+    expect(body.data.avatars[0]).toMatchObject({
+      id: readyAvatar.id,
+      previewUrl: null,
+      isDefault: false,
+      sourceAsset: {
+        id: sourceAssetId,
+      },
+    });
+    expect(body.data.avatars[0].sourceAsset.accessUrl).toEqual(expect.any(String));
+  });
+
+  it("returns generated avatar preview separately from the source image", async () => {
+    const previewUrl = "https://cdn.example.com/avatar-preview.png";
+    const readyAvatar = await createPersistedAvatar("ready", null, { previewUrl });
+
+    const response = await listAvatars(await createAuthenticatedGetRequest());
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.avatars[0]).toMatchObject({
+      id: readyAvatar.id,
+      previewUrl,
+      sourceAsset: {
+        id: sourceAssetId,
+      },
+    });
+    expect(body.data.avatars[0].sourceAsset.accessUrl).toEqual(expect.any(String));
+    expect(body.data.avatars[0].sourceAsset.accessUrl).not.toBe(previewUrl);
+  });
+
+  it("sets a ready avatar as default and returns the default state in later lists", async () => {
+    const avatar = await createPersistedAvatar("ready", null);
+
+    const response = await setDefaultAvatar(await createAuthenticatedGetRequest(), {
+      params: Promise.resolve({ avatarId: avatar.id }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      code: "SUCCESS",
+      data: {
+        avatar: {
+          id: avatar.id,
+          isDefault: true,
+        },
+      },
+    });
+
+    const listResponse = await listAvatars(await createAuthenticatedGetRequest());
+    const listBody = await listResponse.json();
+    expect(listBody.data.avatars).toHaveLength(1);
+    expect(listBody.data.avatars[0]).toMatchObject({
+      id: avatar.id,
+      isDefault: true,
+    });
+  });
+
+  it("clears the previous team default when setting a new default avatar", async () => {
+    const firstAvatar = await createPersistedAvatar("ready", null);
+    const secondAvatar = await createPersistedAvatar("ready", null);
+
+    await setDefaultAvatar(await createAuthenticatedGetRequest(), {
+      params: Promise.resolve({ avatarId: firstAvatar.id }),
+    });
+    await setDefaultAvatar(await createAuthenticatedGetRequest(), {
+      params: Promise.resolve({ avatarId: secondAvatar.id }),
+    });
+
+    const persisted = await prisma.avatar.findMany({
+      where: { id: { in: [firstAvatar.id, secondAvatar.id] } },
+      select: { id: true, isDefault: true },
+      orderBy: { id: "asc" },
+    });
+
+    expect(persisted).toEqual(
+      expect.arrayContaining([
+        { id: firstAvatar.id, isDefault: false },
+        { id: secondAvatar.id, isDefault: true },
+      ])
+    );
+  });
+
+  it("does not allow setting another team's avatar as default", async () => {
+    const otherTeamAvatar = await prisma.avatar.create({
+      data: {
+        teamId: otherTeamId,
+        ownerId: userId,
+        name: "Other Team Avatar",
+        sourceAssetId: otherTeamAssetId,
+        status: "ready",
+        licenseStatus: "approved",
+        qualityReport: PASSED_QUALITY_REPORT,
+      },
+    });
+
+    const response = await setDefaultAvatar(await createAuthenticatedGetRequest(), {
+      params: Promise.resolve({ avatarId: otherTeamAvatar.id }),
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "AVATAR_NOT_FOUND",
+    });
+
+    const persisted = await prisma.avatar.findUnique({
+      where: { id: otherTeamAvatar.id },
+      select: { isDefault: true },
+    });
+    expect(persisted?.isDefault).toBe(false);
+  });
+
+  it("does not allow setting a deleted avatar as default", async () => {
+    const deletedAvatar = await createPersistedAvatar("ready", new Date());
+
+    const response = await setDefaultAvatar(await createAuthenticatedGetRequest(), {
+      params: Promise.resolve({ avatarId: deletedAvatar.id }),
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "AVATAR_NOT_FOUND",
+    });
+
+    const persisted = await prisma.avatar.findUnique({
+      where: { id: deletedAvatar.id },
+      select: { isDefault: true },
+    });
+    expect(persisted?.isDefault).toBe(false);
   });
 
   it("soft deletes an avatar and hides it from later lists", async () => {
@@ -181,6 +352,7 @@ describe("Avatar APIs", () => {
     const deleted = await prisma.avatar.findUnique({ where: { id: avatar.id } });
     expect(deleted).toMatchObject({
       status: "deleted",
+      isDefault: false,
     });
     expect(deleted?.deletedAt).toBeInstanceOf(Date);
 
@@ -215,7 +387,11 @@ describe("Avatar APIs", () => {
     return asset.id;
   }
 
-  async function createPersistedAvatar(status: "draft" | "ready", deletedAt: Date | null) {
+  async function createPersistedAvatar(
+    status: "draft" | "ready",
+    deletedAt: Date | null,
+    options: { previewUrl?: string } = {}
+  ) {
     return prisma.avatar.create({
       data: {
         teamId,
@@ -225,6 +401,7 @@ describe("Avatar APIs", () => {
         status,
         licenseStatus: status === "ready" ? "approved" : "pending",
         qualityReport: PASSED_QUALITY_REPORT,
+        previewUrl: options.previewUrl,
         deletedAt,
       },
     });

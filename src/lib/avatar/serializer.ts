@@ -15,6 +15,7 @@ export type AvatarForSerialization = {
   qualityReport: Prisma.JsonValue | null;
   previewUrl: string | null;
   metadata: Prisma.JsonValue | null;
+  isDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -31,8 +32,9 @@ export type SerializedAvatar = {
   status: AvatarStatus;
   licenseStatus: LicenseStatus;
   qualityReport: Prisma.JsonValue | null;
-  previewUrl: string;
+  previewUrl: string | null;
   metadata: Prisma.JsonValue | null;
+  isDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
   sourceAsset: SerializedAsset;
@@ -55,8 +57,9 @@ export async function serializeAvatar(avatar: AvatarForSerialization): Promise<S
     status: avatar.status,
     licenseStatus: avatar.licenseStatus,
     qualityReport: avatar.qualityReport,
-    previewUrl: avatar.previewUrl || sourceAsset.accessUrl,
+    previewUrl: avatar.previewUrl,
     metadata: avatar.metadata,
+    isDefault: avatar.isDefault,
     createdAt: avatar.createdAt,
     updatedAt: avatar.updatedAt,
     sourceAsset,

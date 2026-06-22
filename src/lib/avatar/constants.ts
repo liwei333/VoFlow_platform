@@ -33,6 +33,7 @@ export const AVATAR_PHOTO_ERROR_CODES = {
   photoBlurry: "AVATAR_PHOTO_BLURRY",
   faceOccluded: "AVATAR_FACE_OCCLUDED",
   exposureInvalid: "AVATAR_PHOTO_EXPOSURE_INVALID",
+  detectorUnavailable: "AVATAR_PHOTO_DETECTOR_UNAVAILABLE",
   metadataInvalid: "AVATAR_PHOTO_METADATA_INVALID",
 } as const;
 
@@ -44,6 +45,7 @@ export const AVATAR_PHOTO_ERROR_MESSAGES = {
   [AVATAR_PHOTO_ERROR_CODES.photoBlurry]: "照片清晰度不足，请重新拍摄或上传更清晰的照片",
   [AVATAR_PHOTO_ERROR_CODES.faceOccluded]: "检测到脸部遮挡，请移除口罩、墨镜或其他遮挡物",
   [AVATAR_PHOTO_ERROR_CODES.exposureInvalid]: "照片曝光异常，请上传光线均匀的照片",
+  [AVATAR_PHOTO_ERROR_CODES.detectorUnavailable]: "照片内容检测服务未接入，暂不能确认人脸、清晰度、遮挡和曝光",
   [AVATAR_PHOTO_ERROR_CODES.metadataInvalid]: "无法读取照片尺寸信息，请重新上传 JPG、PNG 或 WebP 图片",
 } as const;
 
@@ -85,5 +87,6 @@ export const AVATAR_API_MESSAGES = {
   listSuccess: "数字人列表加载成功",
   createSuccess: "数字人创建成功",
   consentSuccess: "肖像授权确认成功",
+  defaultSuccess: "默认数字人已更新",
   deleteSuccess: "数字人已删除",
 } as const;

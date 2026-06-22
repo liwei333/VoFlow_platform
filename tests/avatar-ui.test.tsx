@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import AvatarsPage from "@/app/dashboard/avatars/page";
+import AvatarsPage, { getAvatarPreviewDisplay } from "@/app/dashboard/avatars/page";
 import {
   AVATAR_CONSENT_USAGE_SCOPE_OPTIONS,
   DEFAULT_AVATAR_CONSENT_TEXT,
@@ -18,6 +18,7 @@ describe("Avatar UI", () => {
     expect(html).toContain("肖像授权");
     expect(html).toContain("数字人列表");
     expect(html).toContain("创建数字人");
+    expect(html).toContain("设为默认");
     expect(html).toContain("删除");
     expect(html).not.toContain("该功能正在开发中");
   });
@@ -32,5 +33,31 @@ describe("Avatar UI", () => {
     expect(getAvatarStatusView("ready").label).toBe("可用");
     expect(getAvatarStatusView("deleted").label).toBe("已删除");
     expect(getAvatarLicenseStatusView("approved").label).toBe("已授权");
+  });
+
+  it("labels source-image fallback separately from generated avatar preview", () => {
+    expect(
+      getAvatarPreviewDisplay({
+        previewUrl: null,
+        sourceAsset: {
+          accessUrl: "https://cdn.example.com/source.png",
+        },
+      })
+    ).toEqual({
+      imageUrl: "https://cdn.example.com/source.png",
+      label: "源照片",
+    });
+
+    expect(
+      getAvatarPreviewDisplay({
+        previewUrl: "https://cdn.example.com/avatar-preview.png",
+        sourceAsset: {
+          accessUrl: "https://cdn.example.com/source.png",
+        },
+      })
+    ).toEqual({
+      imageUrl: "https://cdn.example.com/avatar-preview.png",
+      label: "数字人预览",
+    });
   });
 });

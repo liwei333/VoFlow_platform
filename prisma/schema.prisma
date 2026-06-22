@@ -611,6 +611,7 @@ model Avatar {
   qualityReport  Json?
   previewUrl     String?
   metadata       Json?
+  isDefault      Boolean       @default(false)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?
@@ -622,6 +623,7 @@ model Avatar {
 
   @@index([teamId, createdAt])
   @@index([teamId, status])
+  @@index([teamId, isDefault])
   @@index([sourceAssetId])
   @@index([licenseStatus])
   @@map("avatars")

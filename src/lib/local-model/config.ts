@@ -43,6 +43,7 @@ export const LOCAL_MODEL_ENV_EXAMPLES = [
   { key: "ASR_BASE_URL", value: "http://localhost:6000" },
   { key: "TTS_BASE_URL", value: "http://localhost:5000" },
   { key: "AVATAR_BASE_URL", value: "http://localhost:7000" },
+  { key: "AVATAR_PHOTO_DETECTOR_TIMEOUT_MS", value: "5000" },
   { key: "FFMPEG_WORKER", value: "/usr/local/bin/ffmpeg" },
   { key: "GPU_MODE", value: "auto" },
   { key: "QUEUE_REDIS_URL", value: "redis://localhost:6379" },

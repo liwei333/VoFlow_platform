@@ -67,6 +67,24 @@ export async function listReadyAvatars(input: { teamId: string }) {
   return serializeAvatars(avatars);
 }
 
+export async function getDefaultReadyAvatar(input: { teamId: string }) {
+  const avatar = await prisma.avatar.findFirst({
+    where: {
+      teamId: input.teamId,
+      status: AvatarStatus.ready,
+      deletedAt: null,
+      isDefault: true,
+    },
+    include: avatarInclude,
+  });
+
+  if (!avatar) {
+    return null;
+  }
+
+  return serializeAvatar(avatar);
+}
+
 export async function createAvatarWithConsent(input: AvatarServiceInput<CreateAvatarRequest>) {
   const consentValidation = validateRequiredConsent(input.usageScope, input.consentText);
   if (consentValidation) {
@@ -205,12 +223,58 @@ export async function softDeleteAvatar(input: { avatarId: string; teamId: string
     },
     data: {
       status: AvatarStatus.deleted,
+      isDefault: false,
       deletedAt: new Date(),
     },
   });
 
   return {
     success: true as const,
+  };
+}
+
+export async function setDefaultAvatar(input: { avatarId: string; teamId: string }) {
+  const avatar = await prisma.avatar.findFirst({
+    where: {
+      id: input.avatarId,
+      teamId: input.teamId,
+      status: AvatarStatus.ready,
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!avatar) {
+    return avatarError(AVATAR_ERROR_CODES.notFound, 404);
+  }
+
+  const updatedAvatar = await prisma.$transaction(async (tx) => {
+    await tx.avatar.updateMany({
+      where: {
+        teamId: input.teamId,
+        isDefault: true,
+      },
+      data: {
+        isDefault: false,
+      },
+    });
+
+    return tx.avatar.update({
+      where: {
+        id: avatar.id,
+      },
+      data: {
+        isDefault: true,
+      },
+      include: avatarInclude,
+    });
+  });
+
+  return {
+    success: true as const,
+    avatar: await serializeAvatar(updatedAvatar),
   };
 }
 

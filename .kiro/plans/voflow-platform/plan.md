@@ -67,23 +67,32 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 
 交付“发布元信息 -> 多平台参数检查 -> 一键发布 -> 发布状态同步 -> 失败重试”的发布辅助闭环。
 
-## 4. MVP 验收主线
+## 4. MVP 验收主线状态矩阵
 
-1. 用户登录工作台。
-2. 用户创建一个 9:16 项目。
-3. 用户上传一张本人正脸照片。
-4. 系统完成照片质量检测和肖像授权确认。
-5. 系统生成“我的数字人”并在列表中可选。
-6. 用户粘贴爆款视频链接或上传参考视频。
-7. 系统提取原文、钩子、节奏和卖点。
-8. 系统生成改写文案和标题候选。
-9. 系统执行 AI 法务审查，给出风险原因和替换建议。
-10. 用户选择预置音色或克隆音色生成语音。
-11. 系统使用我的数字人生成口播视频。
-12. 系统合成字幕、BGM、画中画、封面和最终 MP4。
-13. 系统生成各平台标题、标签、描述、话题。
-14. 用户一键发布到已授权平台，未授权或 token 过期平台给出可处理状态。
-15. 任务中心展示每个节点状态、产物和失败重试入口。
+状态含义：
+
+- `done`：已实现并有当前可复验的自动化测试或验收记录。
+- `partial`：已有基础能力，但存在 mock/provider 占位、真实服务未接入、端到端联调缺口或验收口径待收口。
+- `not_started`：对应 Spec 尚未开始实现。
+- `blocked`：受外部依赖、环境或上游任务阻塞。
+
+| # | 验收步骤 | 负责 Spec | 当前状态 | 当前证据 | 缺口 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 用户登录工作台 | `voflow-foundation` | done | `tests/api.test.ts`, 登录页和工作台基础页 | 需在最终 MVP 环境复验 |
+| 2 | 用户创建一个 9:16 项目 | `voflow-foundation` | done | 项目 API/UI 测试 | 需在最终 MVP 环境复验 |
+| 3 | 用户上传一张本人正脸照片 | `voflow-self-avatar` | blocked | `POST /api/avatars/photo-check`, `tests/avatar-photo-check-api.test.ts`; 五张真实验收素材已就绪；2026-06-22 实测 `localhost:7000` 为 AirTunes 403，`localhost:7010` 无服务 | 需启动真实本地 `/detect-face` 服务并复验 |
+| 4 | 系统完成照片质量检测和肖像授权确认 | `voflow-self-avatar` | blocked | detector 抽象、mock/local provider、`/detect-face` contract、授权 API 测试；`AVATAR_BASE_URL=http://localhost:7010` 时 `local_model_services.avatar` 为 `offline`，五张图均返回 `AVATAR_PHOTO_DETECTOR_UNAVAILABLE` | 需真实本地人脸检测服务在线后复验质量报告 |
+| 5 | 系统生成“我的数字人”并在列表中可选 | `voflow-self-avatar` | partial | avatar 创建、授权、列表、删除、设为默认、预览口径测试 | 真实生成预览产物待后续 `voflow-video-render` 写入 |
+| 6 | 用户粘贴爆款视频链接或上传参考视频 | `voflow-reference-extract` | done | `voflow-reference-extract` checkpoint 和相关测试 | 需在最终 MVP 环境复验 |
+| 7 | 系统提取原文、钩子、节奏和卖点 | `voflow-reference-extract` | done | 结构分析 Worker 和相关测试 | 需在最终 MVP 环境复验 |
+| 8 | 系统生成改写文案和标题候选 | `voflow-script-ai` | done | 文案改写、标题生成、风险检查测试 | 需在最终 MVP 环境复验 |
+| 9 | 系统执行 AI 法务审查，给出风险原因和替换建议 | `voflow-legal-review` | done | 法务审查 API/service 测试 | 需在最终 MVP 环境复验 |
+| 10 | 用户选择预置音色或克隆音色生成语音 | `voflow-tts`, `voflow-voice-clone` | partial | 预置音色 TTS 已完成 | `voflow-voice-clone` 未开始 |
+| 11 | 系统使用我的数字人生成口播视频 | `voflow-video-render` | not_started | - | Spec 未开始 |
+| 12 | 系统合成字幕、BGM、画中画、封面和最终 MP4 | `voflow-advanced-editing`, `voflow-packaging-export` | not_started | - | Spec 未开始 |
+| 13 | 系统生成各平台标题、标签、描述、话题 | `voflow-publish-assistant` | not_started | - | Spec 未开始 |
+| 14 | 用户一键发布到已授权平台，未授权或 token 过期平台给出可处理状态 | `voflow-publish-assistant` | not_started | - | Spec 未开始 |
+| 15 | 任务中心展示每个节点状态、产物和失败重试入口 | `voflow-workflow-engine` | partial | workflow engine 任务中心和状态机测试 | 需与后续 voice_clone/avatar_render/export/publish 节点端到端联调 |
 
 ## 5. 后续增强范围
 
@@ -94,3 +103,56 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 3. 计费系统。
 4. 数据复盘和选题推荐。
 5. 发布后评论私信运营。
+
+## 6. 当前开发游标
+
+当前唯一开发入口：
+
+- Active Spec: `voflow-self-avatar`
+- Active Scope: 自拍数字人返修收口
+- Active Focus: Checkpoint 15 自拍数字人最终环境验收
+- Status: `in_progress`
+
+未完成当前游标前，不允许并行启动以下新 Spec：
+
+- `voflow-voice-clone`
+- `voflow-video-render`
+- `voflow-advanced-editing`
+- `voflow-packaging-export`
+- `voflow-publish-assistant`
+
+进入下一个 Spec 前必须满足：
+
+1. 当前 Spec 的返修项全部记录到对应 `tasks.md`。
+2. 当前 Spec 的 Checkpoint 状态与真实能力一致，不得把 mock/provider 占位标记为真实能力完成。
+3. `npm run lint` 通过。
+4. 当前 Spec 相关测试通过。
+5. 若全量测试因外部依赖失败，必须记录依赖、失败命令和失败原因。
+6. MVP 状态矩阵中对应行的状态和缺口已同步更新。
+
+## 7. Spec 当前状态表
+
+| Spec | 状态 | 下一步 |
+| --- | --- | --- |
+| `voflow-foundation` | done | 最终 MVP 环境复验 |
+| `voflow-assets-compliance` | done | 最终 MVP 环境复验 |
+| `voflow-workflow-engine` | partial | 与后续节点做端到端联调 |
+| `voflow-local-model-monitor` | done | 后续真实模型接入时复用 |
+| `voflow-reference-extract` | done | 最终 MVP 环境复验 |
+| `voflow-script-ai` | done | 最终 MVP 环境复验 |
+| `voflow-legal-review` | done | 最终 MVP 环境复验 |
+| `voflow-tts` | done | 与 voice clone 和 avatar render 联调 |
+| `voflow-self-avatar` | blocked | 启动真实 `/detect-face` 服务后使用五张验收素材执行 Checkpoint 15 |
+| `voflow-voice-clone` | not_started | self-avatar 返修完成后启动 |
+| `voflow-video-render` | not_started | 依赖 voice clone/self-avatar/workflow |
+| `voflow-advanced-editing` | not_started | 依赖 video render |
+| `voflow-packaging-export` | not_started | 依赖 legal-review/video-render/advanced-editing |
+| `voflow-publish-assistant` | not_started | 依赖 packaging-export |
+
+## 8. 防漂移执行规则
+
+1. `plan.md` 只维护总控、状态、依赖和 MVP 主线，不写具体 API/字段/页面实现细节。
+2. 具体需求以各 Spec 的 `requirements.md` 为准，技术边界以 `design.md` 为准，执行进度以 `tasks.md` 为准。
+3. 任务实现中若发现原计划需要拆分、降级为 mock/provider、或新增配置/错误码/状态，必须先更新对应 Spec 文档，再改代码。
+4. 任一 Checkpoint 不得只因为 `tasks.md` 全部勾选就视为完成，必须逐条对照 Acceptance Criteria 和 MVP 状态矩阵。
+5. 每次任务完成必须按 `docs/03-VoFlow开发执行规范.md` 的执行反馈模板回报。
