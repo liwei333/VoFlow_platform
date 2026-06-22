@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TTS_PITCH_RANGE, TTS_SPEED_RANGE } from "@/lib/tts/constants";
 import type { SerializedVoice } from "@/lib/tts/serializer";
+import {
+  TtsResultPanel,
+  type TtsResultViewModel,
+} from "@/components/tts/TtsResultPanel";
 
 type Project = {
   id: string;
@@ -64,9 +68,11 @@ export default function VoicesPage() {
   const [pitch, setPitch] = useState<number>(TTS_PITCH_RANGE.defaultValue);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [approvingNodeId, setApprovingNodeId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [noticeMessage, setNoticeMessage] = useState("");
-  const [lastResult, setLastResult] = useState<TtsResult | null>(null);
+  const [ttsResults, setTtsResults] = useState<TtsResultViewModel[]>([]);
 
   const selectedVoice = useMemo(
     () => voices.find((voice) => voice.id === selectedVoiceId) ?? null,
@@ -84,12 +90,12 @@ export default function VoicesPage() {
       ),
     [scripts]
   );
-  const canCreateTts =
+  const hasTtsInputs =
     Boolean(selectedVoiceId) &&
     Boolean(selectedProjectId) &&
     Boolean(selectedCandidateId) &&
-    Boolean(selectedJobId) &&
-    !creating;
+    Boolean(selectedJobId);
+  const canCreateTts = hasTtsInputs && !creating;
 
   const fetchVoices = useCallback(async () => {
     const response = await fetch("/api/voices");
@@ -123,6 +129,7 @@ export default function VoicesPage() {
     if (!projectId) {
       setScripts([]);
       setJobs([]);
+      setTtsResults([]);
       return;
     }
 
@@ -151,6 +158,28 @@ export default function VoicesPage() {
     }
   }, []);
 
+  const fetchTtsResults = useCallback(async (jobId: string) => {
+    if (!jobId) {
+      setTtsResults([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/video-jobs/${jobId}/tts`);
+      const body = (await response.json()) as ApiResponse<{ results: TtsResultViewModel[] }>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setTtsResults([]);
+        return;
+      }
+
+      setTtsResults(body.data.results);
+    } catch (error) {
+      console.error("Failed to fetch TTS results:", error);
+      setTtsResults([]);
+    }
+  }, []);
+
   useEffect(() => {
     async function loadInitialData() {
       setLoading(true);
@@ -172,18 +201,21 @@ export default function VoicesPage() {
     fetchProjectData(selectedProjectId);
   }, [fetchProjectData, selectedProjectId]);
 
-  async function createTts() {
-    if (!canCreateTts) {
+  useEffect(() => {
+    fetchTtsResults(selectedJobId);
+  }, [fetchTtsResults, selectedJobId]);
+
+  async function submitTtsTask(endpoint: string): Promise<boolean> {
+    if (!hasTtsInputs) {
       setErrorMessage("请先选择音色、文案和视频任务");
-      return;
+      return false;
     }
 
-    setCreating(true);
     setErrorMessage("");
     setNoticeMessage("");
 
     try {
-      const response = await fetch(`/api/video-jobs/${selectedJobId}/tts`, {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -199,16 +231,74 @@ export default function VoicesPage() {
 
       if (body.code !== "SUCCESS" || !body.data) {
         setErrorMessage(body.message || "TTS 任务创建失败");
-        return;
+        return false;
       }
 
-      setLastResult(body.data);
-      setNoticeMessage("TTS 任务已创建");
+      await fetchTtsResults(selectedJobId);
+      return true;
     } catch (error) {
       console.error("Failed to create TTS task:", error);
       setErrorMessage("TTS 任务创建失败");
+      return false;
+    }
+  }
+
+  async function createTts() {
+    setCreating(true);
+    try {
+      const created = await submitTtsTask(`/api/video-jobs/${selectedJobId}/tts`);
+      if (created) {
+        setNoticeMessage("TTS 任务已创建");
+      }
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function regenerateTts() {
+    setRegenerating(true);
+    try {
+      const created = await submitTtsTask(`/api/video-jobs/${selectedJobId}/tts/regenerate`);
+      if (created) {
+        setNoticeMessage("TTS 重新生成任务已创建");
+      }
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  async function confirmTtsResult(result: TtsResultViewModel) {
+    if (!selectedJobId || !result.node) {
+      setErrorMessage("请选择可确认的语音结果");
+      return;
+    }
+
+    setApprovingNodeId(result.node.id);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(
+        `/api/video-jobs/${selectedJobId}/nodes/${result.node.id}/approve`,
+        {
+          method: "POST",
+        }
+      );
+      const body = (await response.json()) as ApiResponse<unknown>;
+
+      if (body.code !== "SUCCESS") {
+        setErrorMessage(body.message || "语音确认失败");
+        return;
+      }
+
+      setNoticeMessage("语音已确认");
+      await fetchTtsResults(selectedJobId);
+      await fetchProjectData(selectedProjectId);
+    } catch (error) {
+      console.error("Failed to confirm TTS result:", error);
+      setErrorMessage("语音确认失败");
+    } finally {
+      setApprovingNodeId(null);
     }
   }
 
@@ -378,26 +468,15 @@ export default function VoicesPage() {
         </aside>
       </div>
 
-      <section className="rounded-md border border-gray-200 bg-white p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">语音结果</h2>
-          <span className="text-sm text-gray-500">
-            {selectedVoice ? `${selectedVoice.name} / ${selectedVoice.modelId}` : "未选择音色"}
-          </span>
-        </div>
-        {lastResult ? (
-          <div className="grid gap-3 text-sm text-gray-700 sm:grid-cols-4">
-            <ResultCell label="请求" value={lastResult.ttsRequest.id.slice(0, 8)} />
-            <ResultCell label="节点" value={`v${lastResult.node.version} / ${lastResult.node.status}`} />
-            <ResultCell label="语速" value={lastResult.ttsRequest.speed.toString()} />
-            <ResultCell label="音调" value={lastResult.ttsRequest.pitch.toString()} />
-          </div>
-        ) : (
-          <div className="rounded-md border border-gray-200 px-5 py-12 text-center text-sm text-gray-500">
-            暂无生成结果
-          </div>
-        )}
-      </section>
+      <TtsResultPanel
+        selectedVoiceLabel={selectedVoice ? `${selectedVoice.name} / ${selectedVoice.modelId}` : "未选择音色"}
+        results={ttsResults}
+        approvingNodeId={approvingNodeId}
+        regenerating={regenerating}
+        onRefresh={() => fetchTtsResults(selectedJobId)}
+        onConfirm={confirmTtsResult}
+        onRegenerate={() => regenerateTts()}
+      />
     </div>
   );
 }
@@ -440,15 +519,6 @@ function NumberControl({
         />
       </div>
     </label>
-  );
-}
-
-function ResultCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="mt-1 font-medium text-gray-900">{value}</div>
-    </div>
   );
 }
 

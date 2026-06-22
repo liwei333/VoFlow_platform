@@ -70,7 +70,7 @@
   - 保留历史音频 artifact
   - _Requirements: US-3, US-4_
 
-- [ ] 10. 实现语音确认流程
+- [x] 10. 实现语音确认流程
   - TTS 成功后进入 waiting_approval
   - 用户确认后推进 avatar_render
   - 用户拒绝后允许重新生成
@@ -82,20 +82,20 @@
   - 支持 speed/pitch 参数输入
   - _Requirements: US-1, US-3_
 
-- [ ] 12. 实现 TTS 结果 UI
+- [x] 12. 实现 TTS 结果 UI
   - 播放生成音频
   - 展示时长和生成参数
   - 提供确认和重新生成按钮
   - _Requirements: US-4_
 
-- [ ] 13. 添加测试
+- [x] 13. 添加测试
   - 音色列表只返回 active approved
   - 文案超长拒绝生成
   - mock provider 成功写入 artifact
   - provider 超时标记节点失败且可重试
   - _Requirements: US-1, US-2, US-3, US-4_
 
-- [ ] 14. Checkpoint: TTS 验收
+- [x] 14. Checkpoint: TTS 验收
   - 用户可以选择预置音色
   - 用户可以将确认文案生成音频
   - 用户可以试听、确认、重新生成

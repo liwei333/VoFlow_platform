@@ -164,3 +164,11 @@ export async function generatePresignedUrl(
   const objectName = `${buildAssetPath(teamId, assetId)}/${fileName}`;
   return client.presignedUrl('GET', MINIO_BUCKET, objectName, expiresInSeconds);
 }
+
+export async function generatePresignedObjectUrl(
+  objectName: string,
+  expiresInSeconds: number
+): Promise<string> {
+  const client = getMinioClient();
+  return client.presignedUrl('GET', MINIO_BUCKET, objectName, expiresInSeconds);
+}

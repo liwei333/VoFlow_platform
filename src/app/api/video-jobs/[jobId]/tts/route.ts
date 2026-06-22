@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/api-auth";
-import { internalError, invalidJsonBody, success, validationError } from "@/lib/api-response";
+import { internalError, invalidJsonBody, notFound, success, validationError } from "@/lib/api-response";
 import { TTS_ERROR_CODES, TTS_ERROR_MESSAGES, type TtsErrorCode } from "@/lib/tts/constants";
 import { ttsParamsSchema } from "@/lib/tts/validation";
 import {
   createTtsWorkflowTask,
   type CreateTtsWorkflowTaskResult,
 } from "@/services/ttsService";
+import { listTtsResultsForJob } from "@/services/ttsResultService";
 
 const createTtsSchema = z.object({
   scriptCandidateId: z.string().min(1),
@@ -21,6 +22,39 @@ const TTS_BAD_REQUEST_CODES: Set<TtsErrorCode> = new Set([
   TTS_ERROR_CODES.TTS_SCRIPT_TOO_LONG,
   TTS_ERROR_CODES.TTS_PARAMS_INVALID,
 ]);
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ jobId: string }> }
+) {
+  const auth = await requireAuth(request);
+  if ("error" in auth) {
+    return auth.error;
+  }
+
+  const { session } = auth.context;
+  const { jobId } = await params;
+
+  try {
+    const result = await listTtsResultsForJob({
+      jobId,
+      teamId: session.teamId,
+    });
+
+    if (!result.success) {
+      if (result.error.code === "TTS_JOB_NOT_FOUND") {
+        return notFound(result.error.message);
+      }
+
+      return internalError(result.error.message);
+    }
+
+    return success(result.data);
+  } catch (error) {
+    console.error("List TTS results error:", error);
+    return internalError();
+  }
+}
 
 export async function POST(
   request: NextRequest,
