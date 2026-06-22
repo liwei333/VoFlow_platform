@@ -52,6 +52,7 @@ enum AuditAction {
   asset_update
   asset_delete
   asset_consent
+  legal_risk_resolve
   job_create
   job_update
 }
@@ -126,6 +127,35 @@ enum TtsRequestStatus {
   succeeded
   failed
   waiting_approval
+}
+
+enum LegalReviewStatus {
+  pending
+  reviewed
+  waiting_approval
+  approved
+}
+
+enum LegalRiskType {
+  forbidden
+  sensitive
+  exaggeration
+  copyright
+  fact
+  platform_rule
+}
+
+enum LegalRiskSeverity {
+  low
+  medium
+  high
+}
+
+enum LegalRiskAction {
+  pending
+  replaced
+  ignored
+  confirmed_safe
 }
 
 enum ReferenceSourceType {
@@ -224,6 +254,7 @@ model User {
   auditLogs       AuditLog[]
   videoJobs       VideoJob[]     @relation("VideoJobOwner")
   ownedVoices     Voice[]        @relation("VoiceOwner")
+  legalReviews    LegalReview[]  @relation("LegalReviewOwner")
 
   @@map("users")
 }
@@ -241,6 +272,7 @@ model Team {
   videoJobs        VideoJob[]
   referenceSources ReferenceSource[]
   voices           Voice[]
+  legalReviews     LegalReview[]
 
   @@map("teams")
 }
@@ -299,6 +331,7 @@ model VideoJob {
   artifacts Artifact[]
   scripts   Script[]
   ttsRequests TtsRequest[]
+  legalReviews LegalReview[]
 
   @@index([projectId])
   @@index([teamId, createdAt])
@@ -439,10 +472,59 @@ model ScriptCandidate {
 
   script Script @relation(fields: [scriptId], references: [id], onDelete: Cascade)
   ttsRequests TtsRequest[]
+  legalReviews LegalReview[]
 
   @@index([scriptId])
   @@index([status])
   @@map("script_candidates")
+}
+
+model LegalReview {
+  id                String            @id @default(cuid())
+  teamId            String
+  ownerId           String
+  scriptCandidateId String
+  jobId             String?
+  status            LegalReviewStatus @default(pending)
+  summaryJson       Json?
+  reviewedScript    String
+  resolvedScript    String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  team            Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner           User             @relation("LegalReviewOwner", fields: [ownerId], references: [id])
+  scriptCandidate ScriptCandidate  @relation(fields: [scriptCandidateId], references: [id], onDelete: Cascade)
+  job             VideoJob?        @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  riskItems       LegalRiskItem[]
+
+  @@index([teamId, createdAt])
+  @@index([scriptCandidateId])
+  @@index([jobId])
+  @@index([status])
+  @@map("legal_reviews")
+}
+
+model LegalRiskItem {
+  id            String            @id @default(cuid())
+  legalReviewId String
+  riskType      LegalRiskType
+  severity      LegalRiskSeverity
+  originalText  String
+  reason        String
+  suggestion    String?
+  action        LegalRiskAction   @default(pending)
+  ignoredReason String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  legalReview LegalReview @relation(fields: [legalReviewId], references: [id], onDelete: Cascade)
+
+  @@index([legalReviewId])
+  @@index([riskType])
+  @@index([severity])
+  @@index([action])
+  @@map("legal_risk_items")
 }
 
 model Voice {

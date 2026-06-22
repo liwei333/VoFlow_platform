@@ -22,6 +22,8 @@ import {
   getReferenceSourceStatusView,
   isReferenceSelectableMediaAsset,
 } from "@/lib/references/ui";
+import { getLegalRiskItemView, getLegalRiskTypeStats } from "@/lib/legal-review/ui";
+import { LEGAL_RISK_ACTIONS, type LegalRiskResolveAction } from "@/lib/legal-review/constants";
 import { ReferenceSourceRow } from "@/components/references/ReferenceSourceRow";
 import type { ReferenceSourceViewModel as ReferenceSource } from "@/components/references/types";
 
@@ -44,6 +46,37 @@ type ScriptCandidate = {
   status: string;
   createdAt: string;
   updatedAt: string;
+};
+
+type LegalReview = {
+  id: string;
+  scriptCandidateId: string;
+  jobId: string | null;
+  status: string;
+  summaryJson: unknown;
+  reviewedScript: string;
+  resolvedScript: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type LegalRiskItem = {
+  id: string;
+  legalReviewId: string;
+  riskType: string;
+  severity: string;
+  originalText: string;
+  reason: string;
+  suggestion: string | null;
+  action: string;
+  ignoredReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type LegalReviewPayload = {
+  review: LegalReview;
+  riskItems: LegalRiskItem[];
 };
 
 type AsrSegment = {
@@ -130,6 +163,10 @@ export default function ScriptsPage() {
   const [creatingReferenceFromUrl, setCreatingReferenceFromUrl] = useState(false);
   const [retryingReferenceSourceId, setRetryingReferenceSourceId] = useState<string | null>(null);
   const [approvingCandidateId, setApprovingCandidateId] = useState<string | null>(null);
+  const [reviewingCandidateId, setReviewingCandidateId] = useState<string | null>(null);
+  const [replacingReviewId, setReplacingReviewId] = useState<string | null>(null);
+  const [resolvingRiskItemId, setResolvingRiskItemId] = useState<string | null>(null);
+  const [legalReviewsByCandidate, setLegalReviewsByCandidate] = useState<Record<string, LegalReviewPayload>>({});
   const [riskConfirmations, setRiskConfirmations] = useState<Record<string, boolean>>({});
   const [selectedAssetId, setSelectedAssetId] = useState("");
   const [selectedJobId, setSelectedJobId] = useState("");
@@ -342,6 +379,7 @@ export default function ScriptsPage() {
     fetchProjectJobs(selectedProjectId);
     fetchProjectReferences(selectedProjectId);
     setRiskConfirmations({});
+    setLegalReviewsByCandidate({});
   }, [fetchProjectJobs, fetchProjectReferences, fetchProjectScripts, selectedProjectId]);
 
   useEffect(() => {
@@ -630,6 +668,111 @@ export default function ScriptsPage() {
     }
   }
 
+  function mergeLegalReview(candidateId: string, legalReview: LegalReviewPayload) {
+    setLegalReviewsByCandidate((current) => ({
+      ...current,
+      [candidateId]: legalReview,
+    }));
+  }
+
+  async function createLegalReview(candidate: ScriptCandidate) {
+    setReviewingCandidateId(candidate.id);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(`/api/script-candidates/${candidate.id}/legal-review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId: selectedJobId || undefined,
+        }),
+      });
+      const body = (await response.json()) as ApiResponse<LegalReviewPayload>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setErrorMessage(body.message || "法务审查失败");
+        return;
+      }
+
+      mergeLegalReview(candidate.id, body.data);
+      setNoticeMessage("法务审查已完成");
+    } catch (error) {
+      console.error("Failed to create legal review:", error);
+      setErrorMessage("法务审查失败");
+    } finally {
+      setReviewingCandidateId(null);
+    }
+  }
+
+  async function replaceAllLegalRiskItems(candidateId: string, reviewId: string) {
+    setReplacingReviewId(reviewId);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(`/api/legal-reviews/${reviewId}/replace-all`, {
+        method: "POST",
+      });
+      const body = (await response.json()) as ApiResponse<LegalReviewPayload>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setErrorMessage(body.message || "一键替换失败");
+        return;
+      }
+
+      mergeLegalReview(candidateId, body.data);
+      setNoticeMessage("风险项已替换");
+    } catch (error) {
+      console.error("Failed to replace legal risk items:", error);
+      setErrorMessage("一键替换失败");
+    } finally {
+      setReplacingReviewId(null);
+    }
+  }
+
+  async function resolveLegalRiskItem(
+    candidateId: string,
+    item: LegalRiskItem,
+    action: LegalRiskResolveAction
+  ) {
+    const ignoredReason =
+      action === LEGAL_RISK_ACTIONS.ignored ? window.prompt("请输入忽略原因")?.trim() : undefined;
+    if (action === LEGAL_RISK_ACTIONS.ignored && !ignoredReason) {
+      setErrorMessage("忽略风险必须填写原因");
+      return;
+    }
+
+    setResolvingRiskItemId(item.id);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(`/api/legal-risk-items/${item.id}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          ignoredReason,
+        }),
+      });
+      const body = (await response.json()) as ApiResponse<LegalReviewPayload>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setErrorMessage(body.message || "风险项处理失败");
+        return;
+      }
+
+      mergeLegalReview(candidateId, body.data);
+      setNoticeMessage("风险项已处理");
+    } catch (error) {
+      console.error("Failed to resolve legal risk item:", error);
+      setErrorMessage("风险项处理失败");
+    } finally {
+      setResolvingRiskItemId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -884,6 +1027,10 @@ export default function ScriptsPage() {
                 selectedJobId={selectedJobId}
                 approvingCandidateId={approvingCandidateId}
                 riskConfirmations={riskConfirmations}
+                legalReviewsByCandidate={legalReviewsByCandidate}
+                reviewingCandidateId={reviewingCandidateId}
+                replacingReviewId={replacingReviewId}
+                resolvingRiskItemId={resolvingRiskItemId}
                 onRiskConfirmationChange={(candidateId, checked) =>
                   setRiskConfirmations((current) => ({
                     ...current,
@@ -891,6 +1038,9 @@ export default function ScriptsPage() {
                   }))
                 }
                 onApprove={approveCandidate}
+                onCreateLegalReview={createLegalReview}
+                onReplaceAllLegalRiskItems={replaceAllLegalRiskItems}
+                onResolveLegalRiskItem={resolveLegalRiskItem}
               />
             ))}
           </div>
@@ -941,15 +1091,33 @@ function ScriptBlock({
   selectedJobId,
   approvingCandidateId,
   riskConfirmations,
+  legalReviewsByCandidate,
+  reviewingCandidateId,
+  replacingReviewId,
+  resolvingRiskItemId,
   onRiskConfirmationChange,
   onApprove,
+  onCreateLegalReview,
+  onReplaceAllLegalRiskItems,
+  onResolveLegalRiskItem,
 }: {
   script: ScriptRecord;
   selectedJobId: string;
   approvingCandidateId: string | null;
   riskConfirmations: Record<string, boolean>;
+  legalReviewsByCandidate: Record<string, LegalReviewPayload>;
+  reviewingCandidateId: string | null;
+  replacingReviewId: string | null;
+  resolvingRiskItemId: string | null;
   onRiskConfirmationChange: (candidateId: string, checked: boolean) => void;
   onApprove: (candidate: ScriptCandidate) => void;
+  onCreateLegalReview: (candidate: ScriptCandidate) => void;
+  onReplaceAllLegalRiskItems: (candidateId: string, reviewId: string) => void;
+  onResolveLegalRiskItem: (
+    candidateId: string,
+    item: LegalRiskItem,
+    action: LegalRiskResolveAction
+  ) => void;
 }) {
   return (
     <article className="rounded-md border border-gray-200 bg-white">
@@ -990,9 +1158,20 @@ function ScriptBlock({
               candidate={candidate}
               selectedJobId={selectedJobId}
               confirming={approvingCandidateId === candidate.id}
+              reviewing={reviewingCandidateId === candidate.id}
+              replacingReviewId={replacingReviewId}
+              resolvingRiskItemId={resolvingRiskItemId}
+              legalReview={legalReviewsByCandidate[candidate.id] ?? null}
               riskConfirmed={riskConfirmations[candidate.id] === true}
               onRiskConfirmationChange={(checked) => onRiskConfirmationChange(candidate.id, checked)}
               onApprove={() => onApprove(candidate)}
+              onCreateLegalReview={() => onCreateLegalReview(candidate)}
+              onReplaceAllLegalRiskItems={(reviewId) =>
+                onReplaceAllLegalRiskItems(candidate.id, reviewId)
+              }
+              onResolveLegalRiskItem={(item, action) =>
+                onResolveLegalRiskItem(candidate.id, item, action)
+              }
             />
           ))}
         </div>
@@ -1005,16 +1184,33 @@ function CandidateRow({
   candidate,
   selectedJobId,
   confirming,
+  reviewing,
+  replacingReviewId,
+  resolvingRiskItemId,
+  legalReview,
   riskConfirmed,
   onRiskConfirmationChange,
   onApprove,
+  onCreateLegalReview,
+  onReplaceAllLegalRiskItems,
+  onResolveLegalRiskItem,
 }: {
   candidate: ScriptCandidate;
   selectedJobId: string;
   confirming: boolean;
+  reviewing: boolean;
+  replacingReviewId: string | null;
+  resolvingRiskItemId: string | null;
+  legalReview: LegalReviewPayload | null;
   riskConfirmed: boolean;
   onRiskConfirmationChange: (checked: boolean) => void;
   onApprove: () => void;
+  onCreateLegalReview: () => void;
+  onReplaceAllLegalRiskItems: (reviewId: string) => void;
+  onResolveLegalRiskItem: (
+    item: LegalRiskItem,
+    action: LegalRiskResolveAction
+  ) => void;
 }) {
   const statusView = getCandidateStatusView(candidate.status);
   const titles = normalizeTitleCandidates(candidate.titleCandidates);
@@ -1038,14 +1234,24 @@ function CandidateRow({
           </div>
           <p className="whitespace-pre-wrap text-sm leading-6 text-gray-800">{candidate.content}</p>
         </div>
-        <button
-          type="button"
-          onClick={onApprove}
-          disabled={!canApprove}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {confirming ? "确认中..." : "确认候选"}
-        </button>
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
+          <button
+            type="button"
+            onClick={onCreateLegalReview}
+            disabled={reviewing}
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {reviewing ? "审查中..." : "AI 法务审查"}
+          </button>
+          <button
+            type="button"
+            onClick={onApprove}
+            disabled={!canApprove}
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {confirming ? "确认中..." : "确认候选"}
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -1087,6 +1293,157 @@ function CandidateRow({
           )}
         </div>
       </div>
+
+      {legalReview && (
+        <LegalReviewPanel
+          legalReview={legalReview}
+          replacing={replacingReviewId === legalReview.review.id}
+          resolvingRiskItemId={resolvingRiskItemId}
+          onReplaceAll={() => onReplaceAllLegalRiskItems(legalReview.review.id)}
+          onResolveItem={onResolveLegalRiskItem}
+        />
+      )}
     </div>
   );
+}
+
+function LegalReviewPanel({
+  legalReview,
+  replacing,
+  resolvingRiskItemId,
+  onReplaceAll,
+  onResolveItem,
+}: {
+  legalReview: LegalReviewPayload;
+  replacing: boolean;
+  resolvingRiskItemId: string | null;
+  onReplaceAll: () => void;
+  onResolveItem: (
+    item: LegalRiskItem,
+    action: LegalRiskResolveAction
+  ) => void;
+}) {
+  const summary = normalizeLegalReviewSummary(legalReview.review.summaryJson);
+  const stats = getLegalRiskTypeStats(summary);
+  const blockingCount = legalReview.riskItems.filter(
+    (item) => getLegalRiskItemView(item).isBlocking
+  ).length;
+
+  return (
+    <div className="mt-5 border-t border-gray-100 pt-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-sm font-semibold text-gray-900">AI 法务审查</div>
+          <div className="mt-1 text-xs text-gray-500">
+            {legalReview.review.status} / 高风险待处理 {blockingCount}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onReplaceAll}
+          disabled={replacing || legalReview.riskItems.length === 0}
+          className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {replacing ? "替换中..." : "一键替换"}
+        </button>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {stats.map((stat) => (
+          <div key={stat.riskType} className="rounded-md bg-gray-50 px-3 py-2">
+            <div className="text-xs text-gray-500">{stat.label}</div>
+            <div className="mt-1 text-lg font-semibold text-gray-900">{stat.count}</div>
+          </div>
+        ))}
+      </div>
+
+      {legalReview.riskItems.length === 0 ? (
+        <div className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          未命中法务风险
+        </div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {legalReview.riskItems.map((item) => {
+            const itemView = getLegalRiskItemView(item);
+            const resolving = resolvingRiskItemId === item.id;
+            const actionDone = item.action !== "pending";
+
+            return (
+              <div key={item.id} className="rounded-md border border-gray-200 p-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+                        {itemView.riskTypeLabel}
+                      </span>
+                      <span className="text-xs text-gray-500">风险 {itemView.severityLabel}</span>
+                      <span className="text-xs text-gray-500">{itemView.actionLabel}</span>
+                    </div>
+                    <div className="mt-2 text-sm text-gray-900">{item.originalText}</div>
+                    <div className="mt-1 text-sm text-gray-600">{item.reason}</div>
+                    {item.suggestion && (
+                      <div className="mt-1 text-sm text-emerald-700">建议：{item.suggestion}</div>
+                    )}
+                    {item.ignoredReason && (
+                      <div className="mt-1 text-xs text-gray-500">忽略原因：{item.ignoredReason}</div>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onResolveItem(item, LEGAL_RISK_ACTIONS.replaced)}
+                      disabled={resolving || actionDone || !item.suggestion}
+                      className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      替换
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onResolveItem(item, LEGAL_RISK_ACTIONS.confirmedSafe)}
+                      disabled={resolving || actionDone}
+                      className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      安全
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onResolveItem(item, LEGAL_RISK_ACTIONS.ignored)}
+                      disabled={resolving || actionDone}
+                      className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      忽略
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {legalReview.review.resolvedScript && (
+        <div className="mt-4 rounded-md bg-blue-50 px-3 py-2">
+          <div className="text-xs font-medium text-blue-700">处理后文案</div>
+          <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-blue-950">
+            {legalReview.review.resolvedScript}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function normalizeLegalReviewSummary(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const summary = value as { counts?: unknown };
+  if (!summary.counts || typeof summary.counts !== "object" || Array.isArray(summary.counts)) {
+    return null;
+  }
+
+  return {
+    counts: summary.counts as Record<string, number>,
+  };
 }

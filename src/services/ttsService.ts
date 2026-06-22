@@ -10,6 +10,7 @@ import {
 } from "@/lib/tts/constants";
 import { ttsParamsSchema, type TtsParams } from "@/lib/tts/validation";
 import { createWorkflowTraceId } from "@/lib/workflow/trace";
+import { assertLegalReviewResolvedForTts } from "@/services/legalReviewService";
 
 export type CreateTtsWorkflowTaskInput = {
   jobId: string;
@@ -115,6 +116,14 @@ export async function createTtsWorkflowTask(
 
   if (candidate.content.length > SCRIPT_MAX_LENGTH) {
     return ttsError(TTS_ERROR_CODES.TTS_SCRIPT_TOO_LONG);
+  }
+
+  const legalReview = await assertLegalReviewResolvedForTts({
+    scriptCandidateId: candidate.id,
+    teamId: input.teamId,
+  });
+  if (!legalReview.success) {
+    return ttsError(TTS_ERROR_CODES.LEGAL_HIGH_RISK_UNRESOLVED, legalReview.error.message);
   }
 
   const voice = await prisma.voice.findFirst({

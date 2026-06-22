@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { SCRIPT_MAX_LENGTH } from "@/lib/scripts/ui";
 import { listAvailableVoices } from "@/services/voiceService";
+import { createLegalReviewForCandidate } from "@/services/legalReviewService";
 import { createTtsWorkflowTask } from "@/services/ttsService";
 
 describe("TTS services", () => {
@@ -99,6 +100,14 @@ describe("TTS services", () => {
     await prisma.ttsRequest.deleteMany({ where: { jobId } });
     await prisma.workflowNode.deleteMany({ where: { jobId } });
     await prisma.voice.deleteMany({ where: { id: voiceId } });
+    await prisma.legalRiskItem.deleteMany({
+      where: {
+        legalReview: {
+          scriptCandidateId: candidateId,
+        },
+      },
+    });
+    await prisma.legalReview.deleteMany({ where: { scriptCandidateId: candidateId } });
     await prisma.scriptCandidate.deleteMany({ where: { scriptId } });
     await prisma.script.deleteMany({ where: { id: scriptId } });
     await prisma.videoJob.deleteMany({ where: { id: jobId } });
@@ -179,6 +188,42 @@ describe("TTS services", () => {
       error: {
         code: "TTS_SCRIPT_TOO_LONG",
         message: "文案超过 3000 字限制",
+      },
+    });
+  });
+
+  it("rejects TTS task creation while high-risk legal review items are unresolved", async () => {
+    await prisma.scriptCandidate.update({
+      where: { id: candidateId },
+      data: {
+        content: "这款产品绝对第一",
+      },
+    });
+    const review = await createLegalReviewForCandidate({
+      candidateId,
+      jobId,
+      teamId,
+      userId,
+    });
+    expect(review.success).toBe(true);
+
+    const result = await createTtsWorkflowTask({
+      jobId,
+      teamId,
+      userId,
+      scriptCandidateId: candidateId,
+      voiceId,
+      params: {
+        speed: 1,
+        pitch: 0,
+      },
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "LEGAL_HIGH_RISK_UNRESOLVED",
+        message: "存在未处理高风险法务项，不能进入声音生成",
       },
     });
   });
