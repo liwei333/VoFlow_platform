@@ -129,6 +129,13 @@ enum TtsRequestStatus {
   waiting_approval
 }
 
+enum AvatarStatus {
+  draft
+  ready
+  disabled
+  deleted
+}
+
 enum LegalReviewStatus {
   pending
   reviewed
@@ -191,6 +198,7 @@ model Asset {
   owner            User              @relation("AssetOwner", fields: [ownerId], references: [id])
   consents         AssetConsent[]
   referenceSources ReferenceSource[]
+  sourceAvatars    Avatar[]
 
   @@index([teamId, createdAt])
   @@index([teamId, type])
@@ -254,6 +262,8 @@ model User {
   auditLogs       AuditLog[]
   videoJobs       VideoJob[]     @relation("VideoJobOwner")
   ownedVoices     Voice[]        @relation("VoiceOwner")
+  ownedAvatars    Avatar[]       @relation("AvatarOwner")
+  avatarConsents  AvatarConsent[]
   legalReviews    LegalReview[]  @relation("LegalReviewOwner")
 
   @@map("users")
@@ -272,6 +282,7 @@ model Team {
   videoJobs        VideoJob[]
   referenceSources ReferenceSource[]
   voices           Voice[]
+  avatars          Avatar[]
   legalReviews     LegalReview[]
 
   @@map("teams")
@@ -586,6 +597,54 @@ model TtsRequest {
   @@index([scriptCandidateId])
   @@index([status])
   @@map("tts_requests")
+}
+
+model Avatar {
+  id             String        @id @default(cuid())
+  teamId         String
+  ownerId        String
+  name           String
+  sourceAssetId  String
+  provider       String?
+  status         AvatarStatus  @default(draft)
+  licenseStatus  LicenseStatus @default(pending)
+  qualityReport  Json?
+  previewUrl     String?
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  team        Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner       User            @relation("AvatarOwner", fields: [ownerId], references: [id])
+  sourceAsset Asset           @relation(fields: [sourceAssetId], references: [id], onDelete: Restrict)
+  consents    AvatarConsent[]
+
+  @@index([teamId, createdAt])
+  @@index([teamId, status])
+  @@index([sourceAssetId])
+  @@index([licenseStatus])
+  @@map("avatars")
+}
+
+model AvatarConsent {
+  id          String   @id @default(cuid())
+  avatarId    String
+  teamId      String
+  userId      String
+  consentType String
+  consentText String
+  usageScope  String[]
+  ipAddress   String?
+  device      Json?
+  createdAt   DateTime @default(now())
+
+  avatar Avatar @relation(fields: [avatarId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([avatarId])
+  @@index([teamId])
+  @@map("avatar_consents")
 }
 
 model AsrSegment {
