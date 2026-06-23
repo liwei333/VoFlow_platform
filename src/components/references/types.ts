@@ -17,6 +17,14 @@ export type ReferenceSourceViewModel = {
   assetId: string | null;
   status: ReferenceSourceStatus | string;
   durationMs: number | null;
+  title?: string | null;
+  thumbnailUrl?: string | null;
+  metadataJson?: unknown;
+  subtitleJson?: unknown;
+  importMode?: "metadata_only" | "subtitle_only" | "audio_extract" | "uploaded_asset" | string | null;
+  consentStatus?: "pending" | "confirmed" | "rejected" | string | null;
+  consentConfirmedAt?: string | null;
+  consentConfirmedBy?: string | null;
   transcript?: string | null;
   structureJson: unknown;
   errorJson: unknown;

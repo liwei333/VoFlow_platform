@@ -53,6 +53,7 @@ enum AuditAction {
   asset_delete
   asset_consent
   legal_risk_resolve
+  reference_url_import
   job_create
   job_update
 }

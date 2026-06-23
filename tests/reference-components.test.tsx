@@ -36,6 +36,11 @@ describe("Reference extraction UI components", () => {
 
     expect(html).toContain("爆款提取");
     expect(html).toContain("从链接解析");
+    expect(html).toContain("metadata");
+    expect(html).toContain("字幕可用性");
+    expect(html).toContain("推荐导入方式");
+    expect(html).toContain("reference-analysis-only");
+    expect(html).toContain("不提供完整视频下载");
     expect(html).toContain("从素材提取");
     expect(html).toContain("参考来源");
     expect(html).not.toContain("该功能正在开发中");

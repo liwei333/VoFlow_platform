@@ -15,6 +15,10 @@ export const REFERENCE_URL_IMPORT_ERROR_CODES = {
   enqueueFailed: "REFERENCE_URL_IMPORT_ENQUEUE_FAILED",
   subtitleUnavailable: "REFERENCE_SUBTITLE_UNAVAILABLE",
   subtitleParseFailed: "REFERENCE_SUBTITLE_PARSE_FAILED",
+  durationLimitExceeded: "REFERENCE_DURATION_LIMIT_EXCEEDED",
+  audioSizeLimitExceeded: "REFERENCE_AUDIO_SIZE_LIMIT_EXCEEDED",
+  audioExtractFailed: "REFERENCE_AUDIO_EXTRACT_FAILED",
+  prohibitedRequest: "REFERENCE_URL_IMPORT_PROHIBITED_REQUEST",
 } as const;
 
 export const REFERENCE_URL_IMPORT_ERROR_MESSAGES = {
@@ -40,6 +44,14 @@ export const REFERENCE_URL_IMPORT_ERROR_MESSAGES = {
     "参考链接没有可用字幕，请改用上传素材或音频提取路径。",
   [REFERENCE_URL_IMPORT_ERROR_CODES.subtitleParseFailed]:
     "参考链接字幕解析失败，请改用上传素材或音频提取路径。",
+  [REFERENCE_URL_IMPORT_ERROR_CODES.durationLimitExceeded]:
+    "参考链接时长超过限制，请改用上传素材或粘贴文案。",
+  [REFERENCE_URL_IMPORT_ERROR_CODES.audioSizeLimitExceeded]:
+    "参考链接音频超过大小限制，请改用上传素材或粘贴文案。",
+  [REFERENCE_URL_IMPORT_ERROR_CODES.audioExtractFailed]:
+    "参考链接音频提取失败，请改用上传素材或粘贴文案。",
+  [REFERENCE_URL_IMPORT_ERROR_CODES.prohibitedRequest]:
+    "公开参考链接导入仅支持 metadata、字幕或授权后音频参考分析，不支持完整视频下载、cookie/登录态、去水印或批量采集。",
 } as const;
 
 export const REFERENCE_ANALYSIS_ONLY_USAGE_SCOPE = "reference_analysis_only";

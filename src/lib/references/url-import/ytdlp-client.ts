@@ -1,4 +1,7 @@
 import { spawn as nodeSpawn } from "node:child_process";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, extname, join } from "node:path";
 import type { Readable } from "node:stream";
 import {
   REFERENCE_URL_IMPORT_ERROR_CODES,
@@ -24,7 +27,9 @@ export class YtDlpClientError extends Error {
     public readonly code:
       | typeof REFERENCE_URL_IMPORT_ERROR_CODES.ytdlpUnavailable
       | typeof REFERENCE_URL_IMPORT_ERROR_CODES.ytdlpTimeout
-      | typeof REFERENCE_URL_IMPORT_ERROR_CODES.metadataInvalid,
+      | typeof REFERENCE_URL_IMPORT_ERROR_CODES.metadataInvalid
+      | typeof REFERENCE_URL_IMPORT_ERROR_CODES.audioSizeLimitExceeded
+      | typeof REFERENCE_URL_IMPORT_ERROR_CODES.audioExtractFailed,
     message: string,
     public readonly detail?: string
   ) {
@@ -38,6 +43,13 @@ export interface YtDlpClientOptions {
   timeoutMs: number;
   maxMetadataBytes: number;
   spawn?: YtDlpSpawn;
+}
+
+export interface YtDlpExtractedAudio {
+  content: Buffer;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
 }
 
 export class YtDlpClient {
@@ -65,6 +77,72 @@ export class YtDlpClient {
         REFERENCE_URL_IMPORT_ERROR_MESSAGES[REFERENCE_URL_IMPORT_ERROR_CODES.metadataInvalid],
         getErrorDetail(error)
       );
+    }
+  }
+
+  async extractAudio(
+    sourceUrl: string,
+    options: { maxAudioBytes: number }
+  ): Promise<YtDlpExtractedAudio> {
+    const outputDirectory = await mkdtemp(join(tmpdir(), "voflow-reference-audio-"));
+
+    try {
+      await this.run(
+        [
+          "--no-playlist",
+          "--no-warnings",
+          "--extract-audio",
+          "--audio-format",
+          "m4a",
+          "--audio-quality",
+          "0",
+          "--max-filesize",
+          `${options.maxAudioBytes}`,
+          "--output",
+          join(outputDirectory, "reference-audio.%(ext)s"),
+          sourceUrl,
+        ],
+        { maxStdoutBytes: 64 * 1024 }
+      );
+
+      const files = await readdir(outputDirectory);
+      const audioFile = files.find((file) => isSupportedExtractedAudio(file));
+      if (!audioFile) {
+        throw new YtDlpClientError(
+          REFERENCE_URL_IMPORT_ERROR_CODES.audioExtractFailed,
+          REFERENCE_URL_IMPORT_ERROR_MESSAGES[REFERENCE_URL_IMPORT_ERROR_CODES.audioExtractFailed],
+          "yt-dlp did not create an audio output file"
+        );
+      }
+
+      const audioPath = join(outputDirectory, audioFile);
+      const audioStat = await stat(audioPath);
+      if (audioStat.size > options.maxAudioBytes) {
+        throw new YtDlpClientError(
+          REFERENCE_URL_IMPORT_ERROR_CODES.audioSizeLimitExceeded,
+          REFERENCE_URL_IMPORT_ERROR_MESSAGES[REFERENCE_URL_IMPORT_ERROR_CODES.audioSizeLimitExceeded],
+          `extracted audio size ${audioStat.size} exceeds ${options.maxAudioBytes}`
+        );
+      }
+
+      return {
+        content: await readFile(audioPath),
+        fileName: basename(audioFile),
+        mimeType: getAudioMimeType(audioFile),
+        sizeBytes: audioStat.size,
+      };
+    } catch (error) {
+      if (error instanceof YtDlpClientError) {
+        throw error;
+      }
+
+      throw new YtDlpClientError(
+        REFERENCE_URL_IMPORT_ERROR_CODES.audioExtractFailed,
+        REFERENCE_URL_IMPORT_ERROR_MESSAGES[REFERENCE_URL_IMPORT_ERROR_CODES.audioExtractFailed],
+        getErrorDetail(error)
+      );
+    } finally {
+      await rm(outputDirectory, { recursive: true, force: true });
     }
   }
 
@@ -148,4 +226,20 @@ export class YtDlpClient {
 
 function getErrorDetail(error: unknown): string {
   return error instanceof Error && error.message ? error.message : "Unknown yt-dlp error";
+}
+
+function isSupportedExtractedAudio(fileName: string): boolean {
+  return [".m4a", ".mp3", ".wav", ".aac", ".opus", ".webm"].includes(
+    extname(fileName).toLowerCase()
+  );
+}
+
+function getAudioMimeType(fileName: string): string {
+  const extension = extname(fileName).toLowerCase();
+  if (extension === ".mp3") return "audio/mpeg";
+  if (extension === ".wav") return "audio/wav";
+  if (extension === ".aac") return "audio/aac";
+  if (extension === ".opus") return "audio/opus";
+  if (extension === ".webm") return "audio/webm";
+  return "audio/mp4";
 }

@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { writeAuditLog } from "@/lib/audit-log";
 import { prisma } from "@/lib/db";
 import {
   workflowQueue,
@@ -34,6 +35,7 @@ export type ParseReferenceUrlMetadataErrorCode =
   | "REFERENCE_SOURCE_CREATE_FAILED"
   | ReferencePlatformErrorCode
   | typeof REFERENCE_URL_IMPORT_ERROR_CODES.disabled
+  | typeof REFERENCE_URL_IMPORT_ERROR_CODES.prohibitedRequest
   | typeof REFERENCE_URL_IMPORT_ERROR_CODES.platformUnsupported
   | typeof REFERENCE_LINK_PARSE_ERROR_CODES.PARSE_FAILED;
 
@@ -72,6 +74,19 @@ export type ParseReferenceUrlMetadataResult =
     };
 
 export type ReferenceUrlImportMode = "metadata_only" | "subtitle_only" | "audio_extract";
+
+export const REFERENCE_URL_IMPORT_REQUESTED_CAPABILITIES = [
+  "metadata",
+  "subtitle",
+  "audio",
+  "full_video",
+  "cookie_import",
+  "no_watermark",
+  "batch_channel",
+] as const;
+
+export type ReferenceUrlImportRequestedCapability =
+  (typeof REFERENCE_URL_IMPORT_REQUESTED_CAPABILITIES)[number];
 
 export interface ReferenceUrlImportWorkflowInput {
   sourceType: "reference_url_import";
@@ -143,13 +158,50 @@ export type ConfirmReferenceUrlImportResult =
 export async function parseReferenceUrlMetadata(input: {
   projectId: string;
   teamId: string;
+  userId?: string;
   sourceUrl: string;
+  requestedCapability?: ReferenceUrlImportRequestedCapability;
 }): Promise<ParseReferenceUrlMetadataResult> {
   const config = buildReferenceLinkImportConfig();
   if (!config.enabled) {
     return parseReferenceUrlMetadataError(
       REFERENCE_URL_IMPORT_ERROR_CODES.disabled,
       REFERENCE_URL_IMPORT_ERROR_MESSAGES[REFERENCE_URL_IMPORT_ERROR_CODES.disabled],
+      undefined,
+      { fallback: REFERENCE_LINK_PARSE_FALLBACK }
+    );
+  }
+
+  const prohibitedRequest = detectProhibitedReferenceUrlImportRequest({
+    sourceUrl: input.sourceUrl,
+    requestedCapability: input.requestedCapability,
+  });
+  if (prohibitedRequest) {
+    await writeReferenceUrlImportAudit({
+      teamId: input.teamId,
+      userId: input.userId,
+      targetType: "reference_url",
+      targetId: input.sourceUrl,
+      metadata: {
+        status: "blocked",
+        importMode: null,
+        requestedCapability: input.requestedCapability ?? null,
+        prohibitedReason: prohibitedRequest.reason,
+        sourceUrl: input.sourceUrl,
+        platform: null,
+        ytDlpVersion: null,
+        failureReason: {
+          code: REFERENCE_URL_IMPORT_ERROR_CODES.prohibitedRequest,
+          message: REFERENCE_URL_IMPORT_ERROR_MESSAGES[
+            REFERENCE_URL_IMPORT_ERROR_CODES.prohibitedRequest
+          ],
+        },
+      },
+    });
+
+    return parseReferenceUrlMetadataError(
+      REFERENCE_URL_IMPORT_ERROR_CODES.prohibitedRequest,
+      REFERENCE_URL_IMPORT_ERROR_MESSAGES[REFERENCE_URL_IMPORT_ERROR_CODES.prohibitedRequest],
       undefined,
       { fallback: REFERENCE_LINK_PARSE_FALLBACK }
     );
@@ -348,22 +400,47 @@ export async function confirmReferenceUrlImport(input: {
   };
 
   if (input.importMode === "metadata_only") {
-    const updatedReferenceSource = await prisma.referenceSource.update({
-      where: {
-        id: referenceSource.id,
-      },
-      data: {
-        status: "succeeded",
-        importMode: input.importMode,
-        consentStatus: "confirmed",
-        consentConfirmedAt,
-        consentConfirmedBy: input.userId,
-        metadataJson: toPrismaJson(
-          mergeImportConsent(referenceSource.metadataJson, importConsent)
-        ),
-        errorJson: Prisma.JsonNull,
-      },
-      select: referenceSourceSelect,
+    const updatedReferenceSource = await prisma.$transaction(async (tx) => {
+      const updated = await tx.referenceSource.update({
+        where: {
+          id: referenceSource.id,
+        },
+        data: {
+          status: "succeeded",
+          importMode: input.importMode,
+          consentStatus: "confirmed",
+          consentConfirmedAt,
+          consentConfirmedBy: input.userId,
+          metadataJson: toPrismaJson(
+            mergeImportConsent(referenceSource.metadataJson, importConsent)
+          ),
+          errorJson: Prisma.JsonNull,
+        },
+        select: referenceSourceSelect,
+      });
+
+      await writeAuditLog(
+        "reference_url_import",
+        "reference_source",
+        referenceSource.id,
+        {
+          status: "succeeded",
+          importMode: input.importMode,
+          consentTextVersion: input.consentTextVersion ?? null,
+          sourceUrl: referenceSourceUrl,
+          platform: referenceSource.platform,
+          durationMs: referenceSource.durationMs,
+          ytDlpVersion: getYtDlpVersion(referenceSource.metadataJson),
+          failureReason: null,
+        },
+        {
+          teamId: input.teamId,
+          userId: input.userId,
+        },
+        tx
+      );
+
+      return updated;
     });
 
     return {
@@ -590,6 +667,37 @@ function requiresReferenceAnalysisConsent(importMode: ReferenceUrlImportMode): b
   return importMode === "subtitle_only" || importMode === "audio_extract";
 }
 
+function detectProhibitedReferenceUrlImportRequest(input: {
+  sourceUrl: string;
+  requestedCapability?: ReferenceUrlImportRequestedCapability;
+}): { reason: string } | null {
+  if (
+    input.requestedCapability === "full_video" ||
+    input.requestedCapability === "cookie_import" ||
+    input.requestedCapability === "no_watermark" ||
+    input.requestedCapability === "batch_channel"
+  ) {
+    return { reason: input.requestedCapability };
+  }
+
+  const parsedUrl = parseUrlOrNull(input.sourceUrl);
+  if (!parsedUrl) {
+    return null;
+  }
+
+  const pathname = parsedUrl.pathname.toLowerCase();
+  if (
+    pathname.includes("/playlist") ||
+    pathname.includes("/channel/") ||
+    pathname.includes("/c/") ||
+    pathname.startsWith("/@")
+  ) {
+    return { reason: "batch_channel" };
+  }
+
+  return null;
+}
+
 function mergeImportConsent(
   metadataJson: unknown,
   importConsent: Record<string, unknown>
@@ -615,6 +723,51 @@ function toPrismaJson(value: unknown): Prisma.InputJsonValue | typeof Prisma.Jso
 
 function getErrorDetail(error: unknown): string {
   return error instanceof Error && error.message ? error.message : "Unknown reference URL import error";
+}
+
+function getYtDlpVersion(metadataJson: unknown): string | null {
+  if (!metadataJson || typeof metadataJson !== "object" || Array.isArray(metadataJson)) {
+    return null;
+  }
+
+  const metadata = metadataJson as { ytDlpVersion?: unknown; ytdlpVersion?: unknown };
+  return typeof metadata.ytDlpVersion === "string"
+    ? metadata.ytDlpVersion
+    : typeof metadata.ytdlpVersion === "string"
+      ? metadata.ytdlpVersion
+      : null;
+}
+
+function parseUrlOrNull(value: string): URL | null {
+  const trimmed = value.trim();
+  try {
+    return new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+  } catch {
+    return null;
+  }
+}
+
+async function writeReferenceUrlImportAudit(input: {
+  teamId: string;
+  userId?: string;
+  targetType: string;
+  targetId: string;
+  metadata: Prisma.InputJsonValue;
+}): Promise<void> {
+  if (!input.userId) {
+    return;
+  }
+
+  await writeAuditLog(
+    "reference_url_import",
+    input.targetType,
+    input.targetId,
+    input.metadata,
+    {
+      teamId: input.teamId,
+      userId: input.userId,
+    }
+  );
 }
 
 function parseReferenceUrlMetadataError(

@@ -153,6 +153,7 @@ describe("Reference source API", () => {
     await prisma.referenceSource.deleteMany({ where: { id: { in: referenceSourceIds } } });
     await prisma.workflowNode.deleteMany({ where: { jobId: { in: jobIds } } });
     await prisma.videoJob.deleteMany({ where: { id: { in: jobIds } } });
+    await prisma.auditLog.deleteMany({ where: { teamId: { in: [teamId, otherTeamId] } } });
     await prisma.assetConsent.deleteMany({ where: { assetId: { in: [audioAssetId, imageAssetId] } } });
     await prisma.asset.deleteMany({ where: { id: { in: [audioAssetId, imageAssetId] } } });
     await prisma.project.deleteMany({ where: { id: { in: [projectId, otherProjectId] } } });
@@ -424,6 +425,69 @@ describe("Reference source API", () => {
     } finally {
       restoreEnv("VOFLOW_REFERENCE_LINK_IMPORT_ENABLED", previousEnabled);
       restoreEnv("VOFLOW_REFERENCE_ALLOWED_PLATFORMS", previousAllowedPlatforms);
+    }
+  });
+
+  it("blocks full-video download requests for reference URL import", async () => {
+    const previousEnabled = process.env.VOFLOW_REFERENCE_LINK_IMPORT_ENABLED;
+    process.env.VOFLOW_REFERENCE_LINK_IMPORT_ENABLED = "true";
+
+    try {
+      const response = await parseReferenceUrl(
+        await createAuthenticatedRequest(`/api/projects/${projectId}/references/url/parse`, {
+          sourceUrl: "https://www.youtube.com/watch?v=demo",
+          requestedCapability: "full_video",
+        }),
+        { params: Promise.resolve({ projectId }) }
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        code: "REFERENCE_URL_IMPORT_PROHIBITED_REQUEST",
+        message: "公开参考链接导入仅支持 metadata、字幕或授权后音频参考分析，不支持完整视频下载、cookie/登录态、去水印或批量采集。",
+      });
+
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          teamId,
+          targetType: "reference_url",
+        },
+      });
+      expect(auditLog).toMatchObject({
+        action: "reference_url_import",
+        userId,
+        metadata: {
+          status: "blocked",
+          requestedCapability: "full_video",
+          sourceUrl: "https://www.youtube.com/watch?v=demo",
+          failureReason: {
+            code: "REFERENCE_URL_IMPORT_PROHIBITED_REQUEST",
+          },
+        },
+      });
+    } finally {
+      restoreEnv("VOFLOW_REFERENCE_LINK_IMPORT_ENABLED", previousEnabled);
+    }
+  });
+
+  it("blocks batch playlist URLs for reference URL import", async () => {
+    const previousEnabled = process.env.VOFLOW_REFERENCE_LINK_IMPORT_ENABLED;
+    process.env.VOFLOW_REFERENCE_LINK_IMPORT_ENABLED = "true";
+
+    try {
+      const response = await parseReferenceUrl(
+        await createAuthenticatedRequest(`/api/projects/${projectId}/references/url/parse`, {
+          sourceUrl: "https://www.youtube.com/playlist?list=PLdemo",
+        }),
+        { params: Promise.resolve({ projectId }) }
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        code: "REFERENCE_URL_IMPORT_PROHIBITED_REQUEST",
+      });
+    } finally {
+      restoreEnv("VOFLOW_REFERENCE_LINK_IMPORT_ENABLED", previousEnabled);
     }
   });
 

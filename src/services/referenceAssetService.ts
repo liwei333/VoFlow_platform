@@ -2,6 +2,7 @@ import {
   ASSET_LICENSE_ERROR_CODES,
   AssetLicenseError,
   assertAssetUsable,
+  type AssetUsageScope,
 } from "@/lib/assets/consent";
 import { prisma } from "@/lib/db";
 import {
@@ -22,6 +23,7 @@ export const REFERENCE_ASSET_ERROR_CODES = {
   ASSET_NOT_FOUND: "REFERENCE_ASSET_NOT_FOUND",
   UNSUPPORTED_ASSET_TYPE: "REFERENCE_UNSUPPORTED_ASSET_TYPE",
   ASSET_LICENSE_NOT_APPROVED: "ASSET_LICENSE_NOT_APPROVED",
+  ASSET_USAGE_SCOPE_NOT_ALLOWED: "ASSET_USAGE_SCOPE_NOT_ALLOWED",
   DURATION_REQUIRED: "REFERENCE_DURATION_REQUIRED",
   DURATION_LIMIT_EXCEEDED: "REFERENCE_DURATION_LIMIT_EXCEEDED",
 } as const;
@@ -34,6 +36,8 @@ export const REFERENCE_ASSET_ERROR_MESSAGES: Record<ReferenceAssetErrorCode, str
   [REFERENCE_ASSET_ERROR_CODES.ASSET_NOT_FOUND]: "素材不存在",
   [REFERENCE_ASSET_ERROR_CODES.UNSUPPORTED_ASSET_TYPE]: "仅支持音频或视频素材提取爆款参考。",
   [REFERENCE_ASSET_ERROR_CODES.ASSET_LICENSE_NOT_APPROVED]: "素材授权未确认，无法用于爆款提取。",
+  [REFERENCE_ASSET_ERROR_CODES.ASSET_USAGE_SCOPE_NOT_ALLOWED]:
+    "公开链接导入素材仅允许参考分析，不能用于视频生成、数字人、声音克隆或发布。",
   [REFERENCE_ASSET_ERROR_CODES.DURATION_REQUIRED]: "素材缺少音视频时长，无法提取爆款参考。",
   [REFERENCE_ASSET_ERROR_CODES.DURATION_LIMIT_EXCEEDED]: "音视频时长超过 3 分钟，无法提取爆款参考。",
 };
@@ -42,6 +46,7 @@ export interface PrepareReferenceAssetExtractionInput {
   projectId: string;
   teamId: string;
   assetId: string;
+  usageScope?: AssetUsageScope;
 }
 
 export type PrepareReferenceAssetExtractionResult =
@@ -65,6 +70,7 @@ export type PrepareReferenceAssetExtractionResult =
             assetType: ReferenceMediaAssetType;
             storageUrl: string;
             durationMs: number;
+            usageScope: AssetUsageScope;
           };
         };
       };
@@ -80,6 +86,8 @@ export type PrepareReferenceAssetExtractionResult =
 export async function prepareReferenceAssetExtraction(
   input: PrepareReferenceAssetExtractionInput
 ): Promise<PrepareReferenceAssetExtractionResult> {
+  const usageScope = input.usageScope ?? "video_generation";
+
   const project = await prisma.project.findFirst({
     where: {
       id: input.projectId,
@@ -118,13 +126,20 @@ export async function prepareReferenceAssetExtraction(
   }
 
   try {
-    await assertAssetUsable(asset.id, "video_generation");
+    await assertAssetUsable(asset.id, usageScope);
   } catch (error) {
     if (
       error instanceof AssetLicenseError &&
       error.code === ASSET_LICENSE_ERROR_CODES.notApproved
     ) {
       return referenceAssetError(REFERENCE_ASSET_ERROR_CODES.ASSET_LICENSE_NOT_APPROVED);
+    }
+
+    if (
+      error instanceof AssetLicenseError &&
+      error.code === ASSET_LICENSE_ERROR_CODES.scopeNotAllowed
+    ) {
+      return referenceAssetError(REFERENCE_ASSET_ERROR_CODES.ASSET_USAGE_SCOPE_NOT_ALLOWED);
     }
 
     return referenceAssetError(REFERENCE_ASSET_ERROR_CODES.ASSET_NOT_FOUND);
@@ -159,6 +174,7 @@ export async function prepareReferenceAssetExtraction(
           assetType: asset.type,
           storageUrl: asset.storageUrl,
           durationMs,
+          usageScope,
         },
       },
     },

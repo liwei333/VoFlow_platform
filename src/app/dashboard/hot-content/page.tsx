@@ -10,8 +10,10 @@ import {
   getReferenceFallbackMessage,
   getReferenceLinkPlatformPreview,
   getReferenceSourceStatusView,
+  getReferenceUrlImportUiState,
   isReferenceSelectableMediaAsset,
   REFERENCE_UPLOAD_USAGE_SCOPE,
+  type ReferenceUrlImportMode,
 } from "@/lib/references/ui";
 import {
   REFERENCE_PLATFORM_DEFINITIONS,
@@ -53,6 +55,21 @@ type ApiResponse<T> = {
   data?: T;
 };
 
+type ParseReferenceUrlResponse = {
+  referenceSource?: ReferenceSourceViewModel;
+  parsed?: unknown;
+  fallback?: { message?: string };
+};
+
+type ConfirmReferenceUrlImportResponse = {
+  referenceSource: ReferenceSourceViewModel;
+  nextStep: {
+    nodeType: "reference_url_import";
+    status: "queued" | "not_required";
+  };
+  job?: WorkflowJob;
+};
+
 const SUPPORTED_REFERENCE_PLATFORM_LABELS = REFERENCE_PLATFORMS.map(
   (platform) => REFERENCE_PLATFORM_DEFINITIONS[platform].label
 ).join("、");
@@ -81,12 +98,18 @@ export default function HotContentPage() {
   const [selectedAssetId, setSelectedAssetId] = useState("");
   const [referenceSources, setReferenceSources] = useState<ReferenceSourceViewModel[]>([]);
   const [referenceLink, setReferenceLink] = useState("");
+  const [parsedReferenceUrlSource, setParsedReferenceUrlSource] =
+    useState<ReferenceSourceViewModel | null>(null);
+  const [selectedReferenceUrlImportMode, setSelectedReferenceUrlImportMode] =
+    useState<ReferenceUrlImportMode>("metadata_only");
+  const [referenceUrlConsentConfirmed, setReferenceUrlConsentConfirmed] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadDurationSeconds, setUploadDurationSeconds] = useState("");
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingMediaAssets, setLoadingMediaAssets] = useState(false);
   const [loadingReferences, setLoadingReferences] = useState(false);
   const [creatingReferenceFromUrl, setCreatingReferenceFromUrl] = useState(false);
+  const [confirmingReferenceUrlImport, setConfirmingReferenceUrlImport] = useState(false);
   const [creatingReferenceFromAsset, setCreatingReferenceFromAsset] = useState(false);
   const [uploadingReferenceFile, setUploadingReferenceFile] = useState(false);
   const [retryingReferenceSourceId, setRetryingReferenceSourceId] = useState<string | null>(null);
@@ -105,6 +128,13 @@ export default function HotContentPage() {
     () => getReferenceLinkPlatformPreview(referenceLink),
     [referenceLink]
   );
+  const referenceUrlImportUiState = useMemo(
+    () =>
+      parsedReferenceUrlSource
+        ? getReferenceUrlImportUiState(parsedReferenceUrlSource)
+        : null,
+    [parsedReferenceUrlSource]
+  );
   const referenceStats = useMemo(
     () => ({
       total: referenceSources.length,
@@ -119,7 +149,13 @@ export default function HotContentPage() {
     Boolean(selectedProjectId) &&
     Boolean(referenceLink.trim()) &&
     referenceLinkPreview.supported &&
-    !creatingReferenceFromUrl;
+    !creatingReferenceFromUrl &&
+    !confirmingReferenceUrlImport;
+  const canConfirmReferenceUrlImport =
+    Boolean(selectedProjectId) &&
+    Boolean(parsedReferenceUrlSource) &&
+    !confirmingReferenceUrlImport &&
+    (selectedReferenceUrlImportMode === "metadata_only" || referenceUrlConsentConfirmed);
   const canCreateReferenceFromAsset =
     Boolean(selectedProjectId) && Boolean(selectedAssetId) && !creatingReferenceFromAsset;
   const canUploadReferenceFile =
@@ -241,6 +277,9 @@ export default function HotContentPage() {
 
   useEffect(() => {
     fetchProjectReferences(selectedProjectId);
+    setParsedReferenceUrlSource(null);
+    setSelectedReferenceUrlImportMode("metadata_only");
+    setReferenceUrlConsentConfirmed(false);
   }, [fetchProjectReferences, selectedProjectId]);
 
   useEffect(() => {
@@ -333,19 +372,20 @@ export default function HotContentPage() {
     setNoticeMessage("");
 
     try {
-      const response = await fetch(`/api/projects/${selectedProjectId}/references/from-url`, {
+      const response = await fetch(`/api/projects/${selectedProjectId}/references/url/parse`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceUrl: trimmedUrl }),
+        body: JSON.stringify({ sourceUrl: trimmedUrl, requestedCapability: "metadata" }),
       });
-      const body = (await response.json()) as ApiResponse<{
-        referenceSource?: ReferenceSourceViewModel;
+      const body = (await response.json()) as ApiResponse<ParseReferenceUrlResponse> & {
         fallback?: { message?: string };
-      }>;
+      };
 
       if (body.code !== "SUCCESS" || !body.data?.referenceSource) {
         const fallbackMessage =
           body.data?.fallback?.message ||
+          body.fallback?.message ||
+          getReferenceFallbackMessage({ code: body.code }) ||
           (body.code === "REFERENCE_PARSE_FAILED"
             ? getReferenceFallbackMessage({ code: "REFERENCE_PARSE_FAILED" })
             : "");
@@ -354,14 +394,74 @@ export default function HotContentPage() {
       }
 
       mergeReferenceSource(body.data.referenceSource);
-      setReferenceLink("");
-      setNoticeMessage("参考链接已解析");
+      setParsedReferenceUrlSource(body.data.referenceSource);
+      const uiState = getReferenceUrlImportUiState(body.data.referenceSource);
+      setSelectedReferenceUrlImportMode(uiState.recommendedImportMode);
+      setReferenceUrlConsentConfirmed(false);
+      setNoticeMessage("参考链接 metadata 已解析，请确认导入方式");
       await fetchProjectReferences(selectedProjectId);
     } catch (error) {
       console.error("Failed to create reference source from URL:", error);
       setErrorMessage("参考链接解析失败，建议上传视频/音频继续提取。");
     } finally {
       setCreatingReferenceFromUrl(false);
+    }
+  }
+
+  async function confirmReferenceUrlImport() {
+    if (!selectedProjectId || !parsedReferenceUrlSource) {
+      setErrorMessage("请先解析参考链接 metadata");
+      return;
+    }
+
+    if (selectedReferenceUrlImportMode !== "metadata_only" && !referenceUrlConsentConfirmed) {
+      setErrorMessage("请先确认该公开链接仅用于参考分析");
+      return;
+    }
+
+    const uiState = getReferenceUrlImportUiState(parsedReferenceUrlSource);
+    setConfirmingReferenceUrlImport(true);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(
+        `/api/projects/${selectedProjectId}/references/${parsedReferenceUrlSource.id}/import`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            importMode: selectedReferenceUrlImportMode,
+            consentTextVersion: uiState.consentTextVersion,
+            consentConfirmed: selectedReferenceUrlImportMode !== "metadata_only"
+              ? referenceUrlConsentConfirmed
+              : false,
+          }),
+        }
+      );
+      const body = (await response.json()) as ApiResponse<ConfirmReferenceUrlImportResponse>;
+
+      if (body.code !== "SUCCESS" || !body.data?.referenceSource) {
+        setErrorMessage(
+          body.message || getReferenceFallbackMessage({ code: body.code })
+        );
+        return;
+      }
+
+      mergeReferenceSource(body.data.referenceSource);
+      setParsedReferenceUrlSource(body.data.referenceSource);
+      setReferenceUrlConsentConfirmed(false);
+      setNoticeMessage(
+        body.data.nextStep.status === "queued"
+          ? "参考链接导入任务已创建"
+          : "参考链接 metadata 已保存"
+      );
+      await fetchProjectReferences(selectedProjectId);
+    } catch (error) {
+      console.error("Failed to confirm reference URL import:", error);
+      setErrorMessage("参考链接导入确认失败，请重试或改用上传视频/音频。");
+    } finally {
+      setConfirmingReferenceUrlImport(false);
     }
   }
 
@@ -540,7 +640,12 @@ export default function HotContentPage() {
               <div>
                 <input
                   value={referenceLink}
-                  onChange={(event) => setReferenceLink(event.target.value)}
+                  onChange={(event) => {
+                    setReferenceLink(event.target.value);
+                    setParsedReferenceUrlSource(null);
+                    setSelectedReferenceUrlImportMode("metadata_only");
+                    setReferenceUrlConsentConfirmed(false);
+                  }}
                   placeholder="粘贴爆款视频链接"
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -556,6 +661,117 @@ export default function HotContentPage() {
                 {creatingReferenceFromUrl ? "解析中..." : "解析参考链接"}
               </button>
             </form>
+            <div className="mt-4 rounded-md border border-gray-100 bg-gray-50 p-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <div className="text-xs font-medium text-gray-500">metadata</div>
+                  <div className="mt-1 text-sm text-gray-900">
+                    {referenceUrlImportUiState
+                      ? referenceUrlImportUiState.title
+                      : "解析后展示标题、平台、时长和封面"}
+                  </div>
+                  {referenceUrlImportUiState && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      {referenceUrlImportUiState.platformLabel}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-gray-500">字幕可用性</div>
+                  <div className="mt-1 text-sm text-gray-900">
+                    {referenceUrlImportUiState?.subtitleAvailabilityLabel || "等待 metadata"}
+                  </div>
+                  {referenceUrlImportUiState?.subtitleTrackLabel && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      {referenceUrlImportUiState.subtitleTrackLabel}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-gray-500">推荐导入方式</div>
+                  <div className="mt-1 text-sm text-gray-900">
+                    {referenceUrlImportUiState?.recommendedImportModeLabel || "等待 metadata"}
+                  </div>
+                </div>
+              </div>
+
+              {referenceUrlImportUiState?.thumbnailUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={referenceUrlImportUiState.thumbnailUrl}
+                  alt={referenceUrlImportUiState.title}
+                  className="mt-3 aspect-video w-full max-w-xs rounded-md object-cover"
+                />
+              )}
+
+              {referenceUrlImportUiState?.durationMs !== null &&
+                referenceUrlImportUiState?.durationMs !== undefined && (
+                  <div className="mt-3 text-sm text-gray-600">
+                    时长：{formatMediaDuration({ durationMs: referenceUrlImportUiState.durationMs })}
+                  </div>
+                )}
+
+              {referenceUrlImportUiState?.fallbackText && (
+                <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  {referenceUrlImportUiState.fallbackText}
+                </div>
+              )}
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                {[
+                  { value: "subtitle_only", label: "字幕优先" },
+                  { value: "audio_extract", label: "提取音频" },
+                  { value: "metadata_only", label: "仅保存 metadata" },
+                ].map((option) => (
+                  <label
+                    key={option.value}
+                    className="flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+                  >
+                    <input
+                      type="radio"
+                      name="reference-url-import-mode"
+                      value={option.value}
+                      checked={selectedReferenceUrlImportMode === option.value}
+                      disabled={!referenceUrlImportUiState}
+                      onChange={() =>
+                        setSelectedReferenceUrlImportMode(option.value as ReferenceUrlImportMode)
+                      }
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <label className="mt-4 flex items-start gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={referenceUrlConsentConfirmed}
+                  disabled={!referenceUrlImportUiState || selectedReferenceUrlImportMode === "metadata_only"}
+                  onChange={(event) => setReferenceUrlConsentConfirmed(event.target.checked)}
+                />
+                <span>
+                  {referenceUrlImportUiState?.consentText ||
+                    "我确认该公开链接仅用于 reference-analysis-only 参考分析。"}
+                </span>
+              </label>
+
+              <div className="mt-3 text-xs leading-5 text-gray-500">
+                {referenceUrlImportUiState?.boundaryText ||
+                  "参考链接导入只做 metadata、字幕或授权后音频参考分析，不是下载器，不提供完整视频下载、cookie/登录态导入、去水印或批量采集。"}
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  disabled={!canConfirmReferenceUrlImport}
+                  onClick={confirmReferenceUrlImport}
+                  className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {confirmingReferenceUrlImport ? "确认中..." : "确认导入"}
+                </button>
+              </div>
+            </div>
           </section>
 
           <section className="rounded-md border border-gray-200 bg-white p-5">

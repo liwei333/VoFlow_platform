@@ -9,12 +9,14 @@ import {
   validationError,
 } from "@/lib/api-response";
 import {
+  REFERENCE_URL_IMPORT_REQUESTED_CAPABILITIES,
   parseReferenceUrlMetadata,
   type ParseReferenceUrlMetadataErrorCode,
 } from "@/services/referenceUrlImportService";
 
 const parseReferenceUrlSchema = z.object({
   sourceUrl: z.string().trim().min(1),
+  requestedCapability: z.enum(REFERENCE_URL_IMPORT_REQUESTED_CAPABILITIES).optional(),
 });
 
 const REFERENCE_URL_IMPORT_ERROR_STATUS: Record<
@@ -22,6 +24,7 @@ const REFERENCE_URL_IMPORT_ERROR_STATUS: Record<
   number
 > = {
   REFERENCE_URL_IMPORT_DISABLED: 400,
+  REFERENCE_URL_IMPORT_PROHIBITED_REQUEST: 400,
   REFERENCE_URL_PLATFORM_UNSUPPORTED: 400,
   REFERENCE_INVALID_URL: 400,
   REFERENCE_PLATFORM_UNSUPPORTED: 400,
@@ -56,7 +59,9 @@ export async function POST(
     const result = await parseReferenceUrlMetadata({
       projectId,
       teamId: session.teamId,
+      userId: session.userId,
       sourceUrl: parsed.data.sourceUrl,
+      requestedCapability: parsed.data.requestedCapability,
     });
 
     if (!result.success) {

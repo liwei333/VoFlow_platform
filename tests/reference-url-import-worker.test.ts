@@ -105,10 +105,19 @@ describe("reference_url_import worker", () => {
         },
       },
     });
-    await prisma.referenceSource.deleteMany({ where: { id: referenceSourceId } });
+    await prisma.referenceSource.deleteMany({ where: { projectId } });
     await prisma.script.deleteMany({ where: { projectId } });
-    await prisma.workflowNode.deleteMany({ where: { jobId } });
-    await prisma.videoJob.deleteMany({ where: { id: jobId } });
+    await prisma.workflowNode.deleteMany({
+      where: {
+        job: {
+          projectId,
+        },
+      },
+    });
+    await prisma.videoJob.deleteMany({ where: { projectId } });
+    await prisma.auditLog.deleteMany({ where: { teamId } });
+    await prisma.assetConsent.deleteMany({ where: { teamId } });
+    await prisma.asset.deleteMany({ where: { teamId } });
     await prisma.project.deleteMany({ where: { id: projectId } });
     await prisma.teamMember.deleteMany({ where: { teamId } });
     await prisma.team.deleteMany({ where: { id: teamId } });
@@ -237,6 +246,254 @@ describe("reference_url_import worker", () => {
       { startMs: 1_000, endMs: 3_000, text: "第一句参考口播" },
       { startMs: 3_500, endMs: 6_000, text: "第二句成交提醒" },
     ]);
+
+    const auditLog = await prisma.auditLog.findFirst({
+      where: {
+        teamId,
+        targetType: "reference_source",
+        targetId: referenceSourceId,
+      },
+    });
+    expect(auditLog).toMatchObject({
+      action: "reference_url_import",
+      userId,
+      metadata: {
+        status: "succeeded",
+        importMode: "subtitle_only",
+        sourceUrl: "https://www.youtube.com/watch?v=demo",
+        platform: "youtube",
+        ytDlpVersion: null,
+        failureReason: null,
+      },
+    });
+  });
+
+  it("extracts authorized URL audio into an audio Asset and queues reference_extract", async () => {
+    await prisma.referenceSource.update({
+      where: { id: referenceSourceId },
+      data: {
+        importMode: "audio_extract",
+        durationMs: 46_000,
+        subtitleJson: null,
+      },
+    });
+    const audioBuffer = Buffer.from("fake audio content");
+    const audioExtractor = {
+      extractAudio: vi.fn().mockResolvedValue({
+        content: audioBuffer,
+        fileName: "reference-audio.m4a",
+        mimeType: "audio/mp4",
+        sizeBytes: audioBuffer.byteLength,
+      }),
+    };
+    const assetStorage = {
+      uploadAsset: vi.fn().mockResolvedValue("voflow/test/assets/audio.m4a"),
+    };
+    const referenceExtractTask = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        referenceSource: {
+          id: "reference-extract-source-id",
+          projectId,
+          teamId,
+          sourceType: "asset",
+          assetId: "created-asset-id",
+          status: "transcribing",
+          durationMs: 46_000,
+        },
+        job: {
+          id: "reference-extract-job-id",
+          projectId,
+          teamId,
+          ownerId: userId,
+          status: "queued",
+          currentNode: "reference_extract",
+        },
+        node: {
+          id: "reference-extract-node-id",
+          jobId: "reference-extract-job-id",
+          nodeType: "reference_extract",
+          status: "queued",
+          version: 1,
+          input: {},
+        },
+      },
+    });
+    const handler = createReferenceUrlImportWorkflowNodeHandler({
+      audioExtractor,
+      assetStorage,
+      referenceExtractTask,
+      config: {
+        enabled: true,
+        ytdlpBin: "yt-dlp",
+        timeoutMs: 60_000,
+        maxDurationMs: 180_000,
+        maxAudioBytes: 50 * 1024 * 1024,
+        maxMetadataBytes: 2 * 1024 * 1024,
+        maxSubtitleBytes: 5 * 1024 * 1024,
+        allowAudioExtract: true,
+        allowFullVideoDownload: false,
+        allowedPlatforms: ["youtube"],
+      },
+    });
+
+    const result = await handler({
+      payload: createPayload(),
+      input: {
+        ...createNodeInput(),
+        importMode: "audio_extract",
+      },
+    });
+
+    expect(result.output).toMatchObject({
+      sourceType: "reference_url_import",
+      referenceSourceId,
+      importMode: "audio_extract",
+      stage: "transcribing",
+      status: "queued_reference_extract",
+      assetId: expect.any(String),
+      referenceExtractJobId: "reference-extract-job-id",
+      referenceExtractNodeId: "reference-extract-node-id",
+    });
+    expect(audioExtractor.extractAudio).toHaveBeenCalledWith(
+      "https://www.youtube.com/watch?v=demo",
+      expect.objectContaining({
+        maxAudioBytes: 50 * 1024 * 1024,
+        traceId: "trace-reference-url-worker",
+      })
+    );
+    expect(assetStorage.uploadAsset).toHaveBeenCalledWith(
+      teamId,
+      expect.any(String),
+      "reference-audio.m4a",
+      audioBuffer,
+      "audio/mp4",
+      audioBuffer.byteLength
+    );
+    const assetId = referenceExtractTask.mock.calls[0]?.[0]?.assetId;
+    expect(referenceExtractTask).toHaveBeenCalledWith(
+      {
+        projectId,
+        teamId,
+        userId,
+        assetId,
+        usageScope: "reference_analysis_only",
+      }
+    );
+
+    const asset = await prisma.asset.findUnique({
+      where: { id: assetId },
+      include: { consents: true },
+    });
+    expect(asset).toMatchObject({
+      teamId,
+      ownerId: userId,
+      type: "audio",
+      name: "YouTube 参考 - reference audio",
+      storageUrl: "voflow/test/assets/audio.m4a",
+      mimeType: "audio/mp4",
+      sizeBytes: BigInt(audioBuffer.byteLength),
+      licenseStatus: "approved",
+      metadata: {
+        sourceType: "reference_url_import",
+        referenceSourceId,
+        sourceUrl: "https://www.youtube.com/watch?v=demo",
+        platform: "youtube",
+        durationMs: 46_000,
+        importMode: "audio_extract",
+      },
+    });
+    expect(asset?.consents).toHaveLength(1);
+    expect(asset?.consents[0]).toMatchObject({
+      teamId,
+      userId,
+      consentType: "reference_analysis_only",
+      consentText: "reference_analysis_only",
+      usageScope: ["reference_analysis_only"],
+    });
+
+    const referenceSource = await prisma.referenceSource.findUnique({
+      where: { id: referenceSourceId },
+    });
+    expect(referenceSource).toMatchObject({
+      status: "transcribing",
+      assetId,
+      errorJson: null,
+    });
+  });
+
+  it("rejects audio extraction when reference URL import is disabled at worker time", async () => {
+    await prisma.referenceSource.update({
+      where: { id: referenceSourceId },
+      data: {
+        importMode: "audio_extract",
+        durationMs: 46_000,
+      },
+    });
+    const audioExtractor = {
+      extractAudio: vi.fn(),
+    };
+    const handler = createReferenceUrlImportWorkflowNodeHandler({
+      audioExtractor,
+      assetStorage: {
+        uploadAsset: vi.fn(),
+      },
+      referenceExtractTask: vi.fn(),
+      config: {
+        enabled: false,
+        ytdlpBin: "yt-dlp",
+        timeoutMs: 60_000,
+        maxDurationMs: 180_000,
+        maxAudioBytes: 50 * 1024 * 1024,
+        maxMetadataBytes: 2 * 1024 * 1024,
+        maxSubtitleBytes: 5 * 1024 * 1024,
+        allowAudioExtract: true,
+        allowFullVideoDownload: false,
+        allowedPlatforms: ["youtube"],
+      },
+    });
+
+    await expect(
+      handler({
+        payload: createPayload(),
+        input: {
+          ...createNodeInput(),
+          importMode: "audio_extract",
+        },
+      })
+    ).rejects.toMatchObject({
+      code: "REFERENCE_URL_IMPORT_DISABLED",
+    });
+    expect(audioExtractor.extractAudio).not.toHaveBeenCalled();
+
+    const referenceSource = await prisma.referenceSource.findUnique({
+      where: { id: referenceSourceId },
+    });
+    expect(referenceSource?.errorJson).toMatchObject({
+      code: "REFERENCE_URL_IMPORT_DISABLED",
+    });
+
+    const auditLog = await prisma.auditLog.findFirst({
+      where: {
+        teamId,
+        targetType: "reference_source",
+        targetId: referenceSourceId,
+      },
+    });
+    expect(auditLog).toMatchObject({
+      action: "reference_url_import",
+      userId,
+      metadata: {
+        status: "failed",
+        importMode: "audio_extract",
+        sourceUrl: "https://www.youtube.com/watch?v=demo",
+        platform: "youtube",
+        ytDlpVersion: null,
+        failureReason: {
+          code: "REFERENCE_URL_IMPORT_DISABLED",
+        },
+      },
+    });
   });
 
   function createPayload(): WorkflowQueuePayload {

@@ -2,11 +2,13 @@ import { LicenseStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit-log";
+import { REFERENCE_ANALYSIS_ONLY_USAGE_SCOPE } from "@/lib/references/url-import/config";
 
 export const ASSET_USAGE_SCOPES = [
   "video_generation",
   "avatar_generation",
   "publishing",
+  "reference_analysis_only",
 ] as const;
 
 export const DEFAULT_ASSET_CONSENT_TYPE = "asset_license";
@@ -14,6 +16,7 @@ export const DEFAULT_ASSET_CONSENT_TYPE = "asset_license";
 export const ASSET_LICENSE_ERROR_CODES = {
   notFound: "ASSET_NOT_FOUND",
   notApproved: "ASSET_LICENSE_NOT_APPROVED",
+  scopeNotAllowed: "ASSET_USAGE_SCOPE_NOT_ALLOWED",
 } as const;
 
 export const assetConsentRequestSchema = z.object({
@@ -177,6 +180,7 @@ export async function assertAssetUsable(
       id: true,
       teamId: true,
       licenseStatus: true,
+      metadata: true,
       consents: {
         where: {
           usageScope: {
@@ -195,6 +199,10 @@ export async function assertAssetUsable(
     throw new AssetLicenseError(ASSET_LICENSE_ERROR_CODES.notFound, assetId, usageScope);
   }
 
+  if (isReferenceUrlImportedAsset(asset.metadata) && usageScope !== REFERENCE_ANALYSIS_ONLY_USAGE_SCOPE) {
+    throw new AssetLicenseError(ASSET_LICENSE_ERROR_CODES.scopeNotAllowed, assetId, usageScope);
+  }
+
   if (asset.licenseStatus !== "approved" || asset.consents.length === 0) {
     throw new AssetLicenseError(ASSET_LICENSE_ERROR_CODES.notApproved, assetId, usageScope);
   }
@@ -205,4 +213,12 @@ export async function assertAssetUsable(
     licenseStatus: asset.licenseStatus,
     usageScope,
   };
+}
+
+function isReferenceUrlImportedAsset(metadata: Prisma.JsonValue): boolean {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return false;
+  }
+
+  return (metadata as { sourceType?: unknown }).sourceType === "reference_url_import";
 }

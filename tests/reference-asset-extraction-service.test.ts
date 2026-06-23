@@ -169,6 +169,37 @@ describe("prepareReferenceAssetExtraction", () => {
             assetType: "audio",
             storageUrl: "voflow/reference/assets/sample.wav",
             durationMs: 91_000,
+            usageScope: "video_generation",
+          },
+        },
+      },
+    });
+  });
+
+  it("accepts reference-analysis-only authorization when requested", async () => {
+    const asset = await createAsset({
+      type: "audio",
+      metadata: { durationMs: 42_000 },
+      licenseStatus: "approved",
+      usageScope: ["reference_analysis_only"],
+    });
+
+    const result = await prepareReferenceAssetExtraction({
+      projectId,
+      teamId,
+      assetId: asset.id,
+      usageScope: "reference_analysis_only",
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        workflowNode: {
+          input: {
+            assetId: asset.id,
+            assetType: "audio",
+            durationMs: 42_000,
+            usageScope: "reference_analysis_only",
           },
         },
       },

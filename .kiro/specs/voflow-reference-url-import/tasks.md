@@ -62,20 +62,20 @@
   - 复用参考结构分析能力生成 structureJson
   - _Requirements: US-2.1, US-2.2, US-2.3, US-2.4_
 
-- [ ] 9. 实现授权后音频提取
+- [x] 9. 实现授权后音频提取
   - 无字幕或用户选择音频路径时，校验 consent、时长、大小、平台和开关
   - 仅提取音频并上传 MinIO
   - 创建 `Asset(type=audio)` 和 `AssetConsent(usageScope=reference_analysis_only)`
   - 复用现有 `reference_extract` 创建 ASR 和结构分析任务
   - _Requirements: US-3.1, US-3.2, US-3.3, US-3.4, US-3.5_
 
-- [ ] 10. 实现合规阻断和审计日志
+- [x] 10. 实现合规阻断和审计日志
   - 成功和失败导入均写 `AuditLog`
   - 阻断完整视频下载、cookie/登录态导入、去水印、批量频道采集
   - 阻断公开链接导入素材用于 voice clone、avatar、publish 或 generation scope
   - _Requirements: US-4.2, US-4.3, US-4.4, US-4.5_
 
-- [ ] 11. 实现 UI 状态和用户确认
+- [x] 11. 实现 UI 状态和用户确认
   - 在爆款提取 UI 展示 metadata、字幕可用性、推荐 importMode 和失败 fallback
   - 导入前展示 reference-analysis-only 授权确认
   - 明确文案：参考分析，不是下载器，不提供完整视频下载或去水印
@@ -293,3 +293,155 @@
 - 是否满足对应 Acceptance Criteria：满足字幕优先选择、下载/解析、`Script`/`AsrSegment` 创建、绑定 `ReferenceSource.transcriptScriptId` 和复用结构分析生成 `structureJson`。
 - 是否允许勾选：允许勾选 Task 8，不允许勾选 Task 9-14 或 Checkpoint 14。
 - 下一步：Task 9，实现授权后音频提取，创建 `Asset(type=audio)` 和 `AssetConsent(reference_analysis_only)`，并复用现有 `reference_extract` ASR/结构分析链路。
+
+### Task 9: 授权后音频提取
+
+### 任务
+- Spec: `voflow-reference-url-import`
+- Task: 9
+- Requirements: US-3.1、US-3.2、US-3.3、US-3.4、US-3.5
+
+### 修改文件
+- `src/lib/assets/consent.ts`
+- `src/lib/references/url-import/config.ts`
+- `src/lib/references/url-import/ytdlp-client.ts`
+- `src/services/referenceAssetService.ts`
+- `src/services/referenceAsrService.ts`
+- `src/services/referenceUrlImportWorkerService.ts`
+- `tests/reference-asset-extraction-service.test.ts`
+- `tests/reference-url-import-worker.test.ts`
+- `tests/workflow-worker-artifact-service.test.ts`
+
+### 范围说明
+- 本次完成：`reference_url_import` worker 的 `audio_extract` 实际执行链路。
+- Worker 会复核总开关、音频提取开关、平台白名单、授权状态、sourceUrl、时长限制和提取后音频大小限制。
+- 默认 yt-dlp 音频提取使用 `spawn` 参数数组和临时目录，执行 `--no-playlist --extract-audio --audio-format m4a`，不创建完整视频素材，并在 finally 中清理临时目录。
+- 提取成功后上传 MinIO，创建 `Asset(type=audio,licenseStatus=approved)` 和 `AssetConsent(usageScope=["reference_analysis_only"])`。
+- `reference_extract` 入口新增可选 `usageScope`，URL 音频路径显式传 `reference_analysis_only`；普通上传素材路径默认仍使用 `video_generation`。
+- `ReferenceSource(status=transcribing)` 绑定提取出的音频 `assetId`，并在 `metadataJson.audioExtract` 记录 asset、storageUrl、size、reference_extract job/node/source 衔接信息。
+
+### 硬编码检查
+- 是否新增运行时硬编码：新增错误码和限制文案收口在 `src/lib/references/url-import/config.ts`；`reference_analysis_only` 使用配置模块常量。
+- 是否 shell 拼接命令：否，yt-dlp 仍通过 `spawn(ytdlpBin,args,{shell:false})` 调用。
+- 是否下载完整视频：否，Task 9 默认客户端只做音频后处理输出；完整视频下载仍未实现。
+- 是否在 API route 执行下载：否，下载、上传和 reference_extract 入队均在 worker 内执行。
+
+### 公共化检查
+- 复用的公共模块：`uploadAsset`、`createReferenceExtractTask`、`prepareReferenceAssetExtraction`、`assertAssetUsable`、workflow queue。
+- 新增 worker 依赖接口：`ReferenceAudioExtractor`、`ReferenceAudioAssetStorage`、`ReferenceExtractTaskCreator`，测试可注入 fake，不访问外网或 MinIO。
+- 底层授权 scope 扩展为允许 `reference_analysis_only`，但通用资产 UI 默认选项未扩展，避免把参考链接专用 scope 暴露给上传素材生成路径。
+
+### 验证命令
+- RED: `npm run test:run -- tests/reference-asset-extraction-service.test.ts tests/reference-url-import-worker.test.ts` 先失败，原因是 `reference_analysis_only` 授权不被 `reference_extract` 接受，且 `audio_extract` 仍返回 deferred。
+- RED: `npm run test:run -- tests/reference-url-import-worker.test.ts` 先失败，原因是 worker 未复核 `VOFLOW_REFERENCE_LINK_IMPORT_ENABLED`。
+- GREEN: `npm run test:run -- tests/reference-asset-extraction-service.test.ts tests/reference-url-import-worker.test.ts`: 通过，2 files / 8 tests。
+- 回归: `npm run test:run -- tests/reference-url-import-subtitle.test.ts tests/reference-url-import-worker.test.ts tests/workflow-worker-artifact-service.test.ts tests/reference-api.test.ts tests/reference-url-import-config.test.ts tests/reference-url-import-parser.test.ts tests/reference-source-schema.test.ts tests/reference-asset-extraction-service.test.ts tests/reference-asr-service.test.ts tests/asset-consent.test.ts`: 通过，10 files / 58 tests。
+- `npm run lint`: 通过。
+- `npm run build`: 通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 9。
+- 是否满足对应 Acceptance Criteria：满足授权后仅提取音频、创建 `Asset(type=audio)` / `AssetConsent(reference_analysis_only)`、校验开关/平台/时长/大小，并复用现有 `reference_extract` ASR/结构分析链路。
+- 是否允许勾选：允许勾选 Task 9，不允许勾选 Task 10-14 或 Checkpoint 14。
+- 下一步：Task 10，实现合规阻断和审计日志，补齐成功/失败导入审计、完整视频/cookie/去水印/批量采集阻断，以及公开链接导入素材被用于 voice clone/avatar/publish/generation scope 的阻断。
+
+### Task 10: 合规阻断和审计日志
+
+### 任务
+- Spec: `voflow-reference-url-import`
+- Task: 10
+- Requirements: US-4.2、US-4.3、US-4.4、US-4.5
+
+### 修改文件
+- `prisma/schema.prisma`
+- `prisma/migrations/20260623093000_add_reference_url_import_audit_action/migration.sql`
+- `src/app/api/projects/[projectId]/references/from-asset/route.ts`
+- `src/app/api/projects/[projectId]/references/url/parse/route.ts`
+- `src/lib/assets/consent.ts`
+- `src/lib/references/url-import/config.ts`
+- `src/services/referenceAssetService.ts`
+- `src/services/referenceUrlImportService.ts`
+- `src/services/referenceUrlImportWorkerService.ts`
+- `tests/asset-consent.test.ts`
+- `tests/reference-api.test.ts`
+- `tests/reference-url-import-worker.test.ts`
+
+### 范围说明
+- 本次完成：新增 `AuditAction.reference_url_import`，并用 migration 更新数据库 enum。
+- `reference_url_import` worker 在字幕成功、音频导入成功、导入失败时写 `AuditLog(action=reference_url_import,targetType=reference_source)`。
+- 审计 metadata 包含 `status`、`importMode`、`consentTextVersion`、`sourceUrl`、`platform`、`durationMs`、`ytDlpVersion` 和 `failureReason`。
+- URL parse API 新增可选 `requestedCapability`，阻断 `full_video`、`cookie_import`、`no_watermark`、`batch_channel`，并对 YouTube playlist/channel 等批量链接做前置阻断。
+- 阻断请求写 `AuditLog(action=reference_url_import,targetType=reference_url,status=blocked)`，不进入 yt-dlp metadata 解析。
+- `assertAssetUsable` 识别 `metadata.sourceType=reference_url_import` 的素材；当业务请求 `video_generation`、`avatar_generation`、`publishing` 等非 `reference_analysis_only` 用途时，返回 `ASSET_USAGE_SCOPE_NOT_ALLOWED`。
+- `reference_extract` 通过 Task 9 显式传 `reference_analysis_only`，因此公开链接音频仍可用于内部参考分析，但不能被生成/数字人/发布类 scope 复用。
+
+### 硬编码检查
+- 是否新增运行时硬编码：禁止请求错误码/文案收口到 `src/lib/references/url-import/config.ts`；新增 audit action 收口到 Prisma enum/migration。
+- 是否在 API route 调用 yt-dlp：否，API route 只做 schema、鉴权和 service 调用；禁止能力在 service 层阻断。
+- 是否允许完整视频/cookie/去水印/批量采集：否，相关 `requestedCapability` 和批量 URL 在 metadata parse 前返回 `REFERENCE_URL_IMPORT_PROHIBITED_REQUEST`。
+
+### 公共化检查
+- 复用的公共模块：`writeAuditLog`、`assertAssetUsable`、`REFERENCE_ANALYSIS_ONLY_USAGE_SCOPE`。
+- 新增公共输入常量：`REFERENCE_URL_IMPORT_REQUESTED_CAPABILITIES`。
+- 新增数据库能力：`AuditAction.reference_url_import`。
+- 用途阻断放在 `assertAssetUsable`，覆盖后续 voice clone、avatar、publish 或 generation scope 调用，不依赖单一 API route。
+
+### 验证命令
+- RED: `npm run test:run -- tests/asset-consent.test.ts tests/reference-url-import-worker.test.ts tests/reference-api.test.ts` 先失败，原因是 reference-only scope 错误码不存在、禁止请求未阻断、worker 未写审计日志。
+- GREEN: `npm run test:run -- tests/asset-consent.test.ts tests/reference-url-import-worker.test.ts tests/reference-api.test.ts`: 通过，3 files / 31 tests。
+- 回归: `npm run test:run -- tests/reference-url-import-subtitle.test.ts tests/reference-url-import-worker.test.ts tests/workflow-worker-artifact-service.test.ts tests/reference-api.test.ts tests/reference-url-import-config.test.ts tests/reference-url-import-parser.test.ts tests/reference-source-schema.test.ts tests/reference-asset-extraction-service.test.ts tests/reference-asr-service.test.ts tests/asset-consent.test.ts tests/audit-log.test.ts tests/asset-ui.test.ts`: 通过，12 files / 66 tests。
+- `npx prisma generate && npx prisma migrate deploy`: 通过，并应用 `20260623093000_add_reference_url_import_audit_action`。
+- `npm run lint`: 通过。
+- `npm run build`: 通过。
+- `git diff --check`: 通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 10。
+- 是否满足对应 Acceptance Criteria：满足成功/失败导入审计、禁止完整视频/cookie/去水印/批量采集、公开链接导入素材仅允许 `reference_analysis_only` 的用途阻断。
+- 是否允许勾选：允许勾选 Task 10，不允许勾选 Task 11-14 或 Checkpoint 14。
+- 下一步：Task 11，实现 UI 状态和用户确认，展示 metadata、字幕可用性、推荐 importMode、失败 fallback 和 reference-analysis-only 授权确认文案。
+
+### Task 11: UI 状态和用户确认
+
+### 任务
+- Spec: `voflow-reference-url-import`
+- Task: 11
+- Requirements: US-1.1、US-2.1、US-3.1、US-4.1、US-4.5
+
+### 修改文件
+- `src/app/dashboard/hot-content/page.tsx`
+- `src/components/references/types.ts`
+- `src/lib/references/ui.ts`
+- `tests/reference-components.test.tsx`
+- `tests/reference-ui.test.ts`
+
+### 范围说明
+- 本次完成：爆款提取 UI 的参考链接入口切换为两步链路：先调用 `POST /api/projects/{projectId}/references/url/parse` 解析 metadata，再调用 `POST /api/projects/{projectId}/references/{referenceSourceId}/import` 确认导入。
+- UI 解析后展示 metadata 标题、平台、时长、封面、字幕可用性、推荐 importMode 和失败 fallback。
+- 有可用字幕时默认推荐 `subtitle_only`；无字幕时默认推荐 `audio_extract`，并提示可改用上传素材。
+- 导入前展示 reference-analysis-only 授权确认；`subtitle_only` 和 `audio_extract` 需要勾选授权确认后才能提交，`metadata_only` 可直接保存 metadata。
+- 页面明确展示合规边界：参考链接导入不是下载器，不提供完整视频下载、cookie/登录态导入、去水印或批量采集。
+
+### 硬编码检查
+- 是否新增运行时硬编码：未新增散落错误码或导入限制；URL 导入错误文案继续复用 `src/lib/references/url-import/config.ts`。
+- UI 状态文案是否收口：新增 `getReferenceUrlImportUiState()`、`REFERENCE_URL_IMPORT_CONSENT_TEXT`、`REFERENCE_URL_IMPORT_BOUNDARY_TEXT` 和 consent version，集中在 `src/lib/references/ui.ts`。
+- 是否暴露完整视频/cookie/去水印/批量入口：否，页面只提供 metadata、字幕、授权后音频三种参考分析路径。
+
+### 公共化检查
+- 复用的公共模块：`getReferenceFallbackMessage`、`selectPreferredSubtitleTrack`、`formatMediaDuration`、统一 API response 类型。
+- 新增公共函数：`getReferenceUrlImportUiState()`，供页面和测试统一判断字幕可用性、推荐 importMode、授权文案和 fallback。
+- 类型同步：`ReferenceSourceViewModel` 补齐 `title`、`thumbnailUrl`、`metadataJson`、`subtitleJson`、`importMode`、`consentStatus` 等 serializer 字段。
+
+### 验证命令
+- RED: `npm run test:run -- tests/reference-ui.test.ts` 先失败，原因是 `getReferenceUrlImportUiState` 不存在。
+- RED: `npm run test:run -- tests/reference-components.test.tsx` 先失败，原因是爆款提取页面未展示 metadata、字幕可用性、推荐导入方式、reference-analysis-only 和完整视频下载边界文案。
+- GREEN: `npm run test:run -- tests/reference-ui.test.ts tests/reference-components.test.tsx`: 通过，2 files / 10 tests。
+- 回归: `npm run test:run -- tests/reference-ui.test.ts tests/reference-components.test.tsx tests/reference-api.test.ts tests/reference-url-import-config.test.ts tests/reference-url-import-parser.test.ts tests/reference-url-import-subtitle.test.ts tests/reference-url-import-worker.test.ts tests/reference-source-schema.test.ts`: 通过，8 files / 49 tests。
+- `npm run lint`: 通过。
+- `npm run build`: 通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 11。
+- 是否满足对应 Acceptance Criteria：满足 metadata 展示、字幕可用性展示、推荐 importMode、失败 fallback、reference-analysis-only 授权确认和 MVP 合规边界文案。
+- 是否允许勾选：允许勾选 Task 11，不允许勾选 Task 12-14 或 Checkpoint 14。
+- 下一步：Task 12，按任务清单补齐/复核单元、service、worker、API 测试覆盖，并把已有 Task 0-11 测试映射到清单缺口。

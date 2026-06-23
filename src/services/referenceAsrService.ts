@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { Readable } from "node:stream";
+import type { AssetUsageScope } from "@/lib/assets/consent";
 import { getObjectByPath } from "@/lib/storage";
 import { prisma } from "@/lib/db";
 import {
@@ -29,6 +30,7 @@ export interface CreateReferenceExtractTaskInput {
   teamId: string;
   userId: string;
   assetId: string;
+  usageScope?: AssetUsageScope;
 }
 
 export interface CreateReferenceExtractTaskDependencies {
@@ -87,6 +89,7 @@ export async function createReferenceExtractTask(
     projectId: input.projectId,
     teamId: input.teamId,
     assetId: input.assetId,
+    usageScope: input.usageScope,
   });
 
   if (!prepared.success) {

@@ -31,7 +31,7 @@ describe("executeWorkflowNode", () => {
     expect(handlers.legal_review).toBeTypeOf("function");
   });
 
-  it("keeps audio extraction deferred to the mode-specific task", async () => {
+  it("routes audio extraction to the reference URL import worker", async () => {
     const calls: unknown[] = [];
     const repository = createExecutionRepository(calls, {
       sourceType: "reference_url_import",
@@ -58,26 +58,18 @@ describe("executeWorkflowNode", () => {
     });
 
     expect(result).toEqual({
-      success: true,
-      data: {
-        output: {
-          sourceType: "reference_url_import",
-          referenceSourceId: "ref-1",
-          importMode: "audio_extract",
-          stage: "importing",
-          status: "deferred_to_audio_extract_task",
-        },
+      success: false,
+      error: {
+        code: "REFERENCE_SOURCE_NOT_FOUND",
+        message: "参考来源不存在",
       },
     });
     expect(calls.at(-1)).toEqual({
-      markSucceeded: {
+      markFailed: {
         nodeId: "node-1",
-        output: {
-          sourceType: "reference_url_import",
-          referenceSourceId: "ref-1",
-          importMode: "audio_extract",
-          stage: "importing",
-          status: "deferred_to_audio_extract_task",
+        error: {
+          code: "REFERENCE_SOURCE_NOT_FOUND",
+          message: "参考来源不存在",
         },
         finishedAt: new Date("2026-06-23T00:00:00.000Z"),
       },

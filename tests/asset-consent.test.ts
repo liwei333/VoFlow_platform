@@ -37,6 +37,7 @@ describe("Asset consent service", () => {
     licenseStatus: LicenseStatus;
     deletedAt?: Date;
     usageScope?: string[];
+    metadata?: Record<string, unknown>;
   }) {
     const assetId = `test-assert-${crypto.randomUUID()}`;
     createdAssetIds.push(assetId);
@@ -51,6 +52,7 @@ describe("Asset consent service", () => {
         storageUrl: `voflow/${teamId}/assets/${assetId}/raw/test.jpg`,
         mimeType: "image/jpeg",
         sizeBytes: BigInt(1000),
+        metadata: options.metadata,
         licenseStatus: options.licenseStatus,
         deletedAt: options.deletedAt,
       },
@@ -132,6 +134,24 @@ describe("Asset consent service", () => {
 
     await expect(assertAssetUsable(assetId, "video_generation")).rejects.toMatchObject({
       code: ASSET_LICENSE_ERROR_CODES.notApproved,
+      assetId,
+      usageScope: "video_generation",
+    });
+  });
+
+  it("rejects public URL imported assets outside reference analysis scope", async () => {
+    const assetId = await createAsset({
+      licenseStatus: "approved",
+      usageScope: ["reference_analysis_only"],
+      metadata: {
+        sourceType: "reference_url_import",
+        referenceSourceId: "reference-url-source-id",
+        importMode: "audio_extract",
+      },
+    });
+
+    await expect(assertAssetUsable(assetId, "video_generation")).rejects.toMatchObject({
+      code: ASSET_LICENSE_ERROR_CODES.scopeNotAllowed,
       assetId,
       usageScope: "video_generation",
     });
