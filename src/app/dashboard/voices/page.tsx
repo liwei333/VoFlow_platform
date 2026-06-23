@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TTS_PITCH_RANGE, TTS_SPEED_RANGE } from "@/lib/tts/constants";
 import type { SerializedVoice } from "@/lib/tts/serializer";
+import type { SerializedVoiceSample } from "@/lib/voice-clone/serializer";
+import {
+  DEFAULT_VOICE_CONSENT_TEXT,
+  VOICE_CONSENT_USAGE_SCOPE_OPTIONS,
+} from "@/lib/voice-clone/ui";
 import {
   TtsResultPanel,
   type TtsResultViewModel,
@@ -49,6 +54,25 @@ type TtsResult = {
   };
 };
 
+type VoiceSampleConsent = {
+  id: string;
+  voiceSampleId: string;
+  usageScope: string[];
+};
+
+type VoiceCloneTrainingTask = {
+  node: {
+    id: string;
+    status: string;
+    version: number;
+  };
+  voiceCloneJob: {
+    id: string;
+    status: string;
+    provider: string;
+  };
+};
+
 type ApiResponse<T> = {
   code: string;
   message?: string;
@@ -70,6 +94,16 @@ export default function VoicesPage() {
   const [creating, setCreating] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [approvingNodeId, setApprovingNodeId] = useState<string | null>(null);
+  const [voiceSampleFile, setVoiceSampleFile] = useState<File | null>(null);
+  const [voiceSampleName, setVoiceSampleName] = useState("");
+  const [voiceSampleDurationMs, setVoiceSampleDurationMs] = useState("12000");
+  const [uploadedVoiceSample, setUploadedVoiceSample] = useState<SerializedVoiceSample | null>(null);
+  const [uploadingVoiceSample, setUploadingVoiceSample] = useState(false);
+  const [confirmingVoiceConsent, setConfirmingVoiceConsent] = useState(false);
+  const [voiceConsent, setVoiceConsent] = useState<VoiceSampleConsent | null>(null);
+  const [creatingVoiceCloneTask, setCreatingVoiceCloneTask] = useState(false);
+  const [voiceCloneTrainingTask, setVoiceCloneTrainingTask] =
+    useState<VoiceCloneTrainingTask | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [noticeMessage, setNoticeMessage] = useState("");
   const [ttsResults, setTtsResults] = useState<TtsResultViewModel[]>([]);
@@ -96,6 +130,19 @@ export default function VoicesPage() {
     Boolean(selectedCandidateId) &&
     Boolean(selectedJobId);
   const canCreateTts = hasTtsInputs && !creating;
+  const canUploadVoiceSample =
+    Boolean(voiceSampleFile) &&
+    Number.isFinite(Number(voiceSampleDurationMs)) &&
+    Number(voiceSampleDurationMs) > 0 &&
+    !uploadingVoiceSample;
+  const canConfirmVoiceConsent =
+    Boolean(uploadedVoiceSample) && !voiceConsent && !confirmingVoiceConsent;
+  const canCreateVoiceCloneTask =
+    Boolean(uploadedVoiceSample) &&
+    Boolean(voiceConsent) &&
+    Boolean(selectedJobId) &&
+    !voiceCloneTrainingTask &&
+    !creatingVoiceCloneTask;
 
   const fetchVoices = useCallback(async () => {
     const response = await fetch("/api/voices");
@@ -302,6 +349,127 @@ export default function VoicesPage() {
     }
   }
 
+  async function uploadVoiceSample() {
+    if (!voiceSampleFile || !canUploadVoiceSample) {
+      setErrorMessage("请先选择音频样本并填写有效时长");
+      return;
+    }
+
+    setUploadingVoiceSample(true);
+    setErrorMessage("");
+    setNoticeMessage("");
+    setVoiceConsent(null);
+    setVoiceCloneTrainingTask(null);
+
+    try {
+      const formData = new FormData();
+      formData.set("file", voiceSampleFile);
+      formData.set("name", voiceSampleName.trim() || voiceSampleFile.name);
+      formData.set("durationMs", voiceSampleDurationMs);
+
+      const response = await fetch("/api/voices/samples", {
+        method: "POST",
+        body: formData,
+      });
+      const body = (await response.json()) as ApiResponse<{
+        voiceSample: SerializedVoiceSample;
+      }>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setErrorMessage(body.message || "声音样本上传失败");
+        return;
+      }
+
+      setUploadedVoiceSample(body.data.voiceSample);
+      setNoticeMessage("声音样本已通过质检，请确认声音授权");
+    } catch (error) {
+      console.error("Failed to upload voice sample:", error);
+      setErrorMessage("声音样本上传失败");
+    } finally {
+      setUploadingVoiceSample(false);
+    }
+  }
+
+  async function confirmVoiceConsent() {
+    if (!uploadedVoiceSample || !canConfirmVoiceConsent) {
+      setErrorMessage("请先上传合格的声音样本");
+      return;
+    }
+
+    setConfirmingVoiceConsent(true);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(`/api/voices/samples/${uploadedVoiceSample.id}/consents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          consentText: DEFAULT_VOICE_CONSENT_TEXT,
+          usageScope: VOICE_CONSENT_USAGE_SCOPE_OPTIONS.map((option) => option.value),
+          deviceJson: {
+            userAgent: window.navigator.userAgent,
+          },
+        }),
+      });
+      const body = (await response.json()) as ApiResponse<{
+        voiceSample: SerializedVoiceSample;
+        consent: VoiceSampleConsent;
+      }>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setErrorMessage(body.message || "声音授权确认失败");
+        return;
+      }
+
+      setUploadedVoiceSample(body.data.voiceSample);
+      setVoiceConsent(body.data.consent);
+      setNoticeMessage("声音授权已确认，可进入声音克隆训练");
+    } catch (error) {
+      console.error("Failed to confirm voice consent:", error);
+      setErrorMessage("声音授权确认失败");
+    } finally {
+      setConfirmingVoiceConsent(false);
+    }
+  }
+
+  async function createVoiceCloneTask() {
+    if (!uploadedVoiceSample || !voiceConsent || !selectedJobId) {
+      setErrorMessage("请先上传合格样本、确认授权并选择视频任务");
+      return;
+    }
+
+    setCreatingVoiceCloneTask(true);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch("/api/voices/clone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId: selectedJobId,
+          voiceSampleId: uploadedVoiceSample.id,
+        }),
+      });
+      const body = (await response.json()) as ApiResponse<VoiceCloneTrainingTask>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setErrorMessage(body.message || "声音克隆训练任务创建失败");
+        return;
+      }
+
+      setVoiceCloneTrainingTask(body.data);
+      setNoticeMessage("声音克隆训练任务已创建");
+      await fetchProjectData(selectedProjectId);
+    } catch (error) {
+      console.error("Failed to create voice clone task:", error);
+      setErrorMessage("声音克隆训练任务创建失败");
+    } finally {
+      setCreatingVoiceCloneTask(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -334,6 +502,104 @@ export default function VoicesPage() {
           {noticeMessage}
         </div>
       )}
+
+      <section className="rounded-md border border-gray-200 bg-white p-5">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">上传声音样本</h2>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="block text-sm font-medium text-gray-700">
+                音频文件
+                <input
+                  type="file"
+                  accept="audio/*"
+                  onChange={(event) => setVoiceSampleFile(event.target.files?.[0] ?? null)}
+                  className="mt-2 block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-gray-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-gray-700"
+                />
+              </label>
+
+              <label className="block text-sm font-medium text-gray-700">
+                样本名称
+                <input
+                  type="text"
+                  value={voiceSampleName}
+                  onChange={(event) => setVoiceSampleName(event.target.value)}
+                  placeholder={voiceSampleFile?.name || "我的声音样本"}
+                  className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+
+              <label className="block text-sm font-medium text-gray-700">
+                样本时长 ms
+                <input
+                  type="number"
+                  min={1}
+                  step={1000}
+                  value={voiceSampleDurationMs}
+                  onChange={(event) => setVoiceSampleDurationMs(event.target.value)}
+                  className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={uploadVoiceSample}
+                  disabled={!canUploadVoiceSample}
+                  className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {uploadingVoiceSample ? "上传中..." : "上传并检测"}
+                </button>
+              </div>
+            </div>
+
+            {uploadedVoiceSample && (
+              <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                样本已通过质检，时长 {uploadedVoiceSample.durationMs ?? "-"} ms
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
+            <h2 className="text-base font-semibold text-gray-900">声音授权</h2>
+            <div className="mt-3 rounded-md border border-gray-200 bg-white p-3 text-sm leading-6 text-gray-700">
+              {DEFAULT_VOICE_CONSENT_TEXT}
+            </div>
+            <div className="mt-3 space-y-2">
+              {VOICE_CONSENT_USAGE_SCOPE_OPTIONS.map((option) => (
+                <label key={option.value} className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked readOnly className="h-4 w-4 rounded border-gray-300" />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={confirmVoiceConsent}
+              disabled={!canConfirmVoiceConsent}
+              className="mt-4 w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {confirmingVoiceConsent
+                ? "提交中..."
+                : voiceConsent
+                  ? "已确认授权"
+                  : "确认声音授权"}
+            </button>
+            <button
+              type="button"
+              onClick={createVoiceCloneTask}
+              disabled={!canCreateVoiceCloneTask}
+              className="mt-3 w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {creatingVoiceCloneTask
+                ? "创建中..."
+                : voiceCloneTrainingTask
+                  ? "训练任务已创建"
+                  : "开始声音训练"}
+            </button>
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="rounded-md border border-gray-200 bg-white p-5">

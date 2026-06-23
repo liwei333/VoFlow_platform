@@ -10,6 +10,7 @@ import { createReferenceAsrWorkflowNodeHandler } from "@/services/referenceAsrSe
 import { createReferenceStructureWorkflowNodeHandler } from "@/services/referenceStructureWorkerService";
 import { createReferenceUrlImportWorkflowNodeHandler } from "@/services/referenceUrlImportWorkerService";
 import { createTtsWorkflowNodeHandler } from "@/services/ttsWorkerService";
+import { createVoiceCloneWorkflowNodeHandler } from "@/services/voiceCloneWorkerService";
 
 export const WORKFLOW_NODE_EXECUTION_FAILED = "WORKFLOW_NODE_EXECUTION_FAILED";
 
@@ -144,6 +145,7 @@ export function createDefaultWorkflowNodeHandlers(): WorkflowNodeHandlers {
     script_rewrite: createRewriteWorkflowNodeHandler(),
     script_title: createTitleWorkflowNodeHandler(),
     legal_review: createRiskWorkflowNodeHandler(),
+    voice_clone: createVoiceCloneWorkflowNodeHandler(),
     tts: createTtsWorkflowNodeHandler(),
   };
 }

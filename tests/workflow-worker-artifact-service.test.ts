@@ -29,6 +29,7 @@ describe("executeWorkflowNode", () => {
     expect(handlers.script_rewrite).toBeTypeOf("function");
     expect(handlers.script_title).toBeTypeOf("function");
     expect(handlers.legal_review).toBeTypeOf("function");
+    expect(handlers.voice_clone).toBeTypeOf("function");
   });
 
   it("routes audio extraction to the reference URL import worker", async () => {

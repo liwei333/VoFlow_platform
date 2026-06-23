@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/api-auth";
 import { success } from "@/lib/api-response";
 import { serializeAsset } from "@/lib/assets/serializer";
-import { validateAsset } from "@/lib/assets/validation";
-import { uploadAsset, deleteAsset, ensureBucketExists, getMinioDiagnostics } from "@/lib/storage";
-import { writeAuditLog } from "@/lib/audit-log";
 import { AssetType } from "@prisma/client";
 import { z } from "zod";
+import { uploadAssetFile } from "@/services/assetUploadService";
 
 export async function POST(request: NextRequest) {
   // Step 1: Authentication
@@ -64,154 +61,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 5: Validate file
-    const mimeType = file.type;
-    const sizeBytes = file.size;
-    const validation = validateAsset(mimeType, sizeBytes, assetType);
+    let metadata = null;
 
-    if (!validation.valid) {
-      return NextResponse.json(
-        {
-          code: "VALIDATION_ERROR",
-          message: validation.errorMessage,
-          errorCode: validation.errorCode
-        },
-        { status: 400 }
-      );
-    }
-
-    // Step 6: Generate asset ID
-    const assetId = crypto.randomUUID();
-
-    // Step 7: Prepare file for upload
-    const fileName = file.name || `${assetId}`;
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Step 8: Ensure bucket exists
-    try {
-      await ensureBucketExists();
-    } catch (error) {
-      console.error("Bucket initialization error:", getMinioDiagnostics(error));
-      return NextResponse.json(
-        {
-          code: "STORAGE_ERROR",
-          message: "存储初始化失败"
-        },
-        { status: 500 }
-      );
-    }
-
-    // Step 9: Upload to MinIO
-    let storageUrl: string;
-    try {
-      storageUrl = await uploadAsset(
-        session.teamId,
-        assetId,
-        fileName,
-        buffer,
-        mimeType,
-        sizeBytes
-      );
-    } catch (error) {
-      console.error("MinIO upload error:", getMinioDiagnostics(error));
-      return NextResponse.json(
-        {
-          code: "STORAGE_ERROR",
-          message: "文件上传失败"
-        },
-        { status: 500 }
-      );
-    }
-
-    // Step 10: Write to database
-    try {
-      const assetName = nameStr || file.name || assetId;
-      let metadata = null;
-
-      if (metadataStr) {
-        try {
-          metadata = JSON.parse(metadataStr);
-        } catch {
-          // Invalid JSON, ignore metadata
-        }
-      }
-
-      const asset = await prisma.$transaction(async (tx) => {
-        const createdAsset = await tx.asset.create({
-          data: {
-            id: assetId,
-            teamId: session.teamId,
-            ownerId: session.userId,
-            type: assetType,
-            name: assetName,
-            storageUrl,
-            mimeType,
-            sizeBytes: BigInt(sizeBytes),
-            metadata,
-            licenseStatus: "pending",
-          },
-          select: {
-            id: true,
-            teamId: true,
-            ownerId: true,
-            type: true,
-            name: true,
-            storageUrl: true,
-            mimeType: true,
-            sizeBytes: true,
-            metadata: true,
-            licenseStatus: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        });
-
-        await writeAuditLog(
-          "asset_upload",
-          "asset",
-          createdAsset.id,
-          {
-            name: createdAsset.name,
-            type: createdAsset.type,
-            storageUrl: createdAsset.storageUrl,
-            mimeType: createdAsset.mimeType,
-          },
-          {
-            teamId: session.teamId,
-            userId: session.userId,
-          },
-          tx
-        );
-
-        return createdAsset;
-      });
-
-      const responseAsset = await serializeAsset(asset, {
-        onAccessUrlError: (error) => {
-          console.error("Failed to generate presigned URL:", error);
-        },
-      });
-
-      return success({ asset: responseAsset }, "素材上传成功");
-    } catch (error) {
-      // Step 10: Cleanup uploaded file if DB write fails
-      console.error("Database write error:", error);
-
+    if (metadataStr) {
       try {
-        await deleteAsset(session.teamId, assetId, fileName);
-      } catch (cleanupError) {
-        console.error("Cleanup error:", cleanupError);
+        metadata = JSON.parse(metadataStr);
+      } catch {
+        // Invalid JSON, ignore metadata
       }
+    }
 
+    const result = await uploadAssetFile({
+      teamId: session.teamId,
+      userId: session.userId,
+      file,
+      assetType,
+      name: nameStr,
+      metadata,
+    });
+
+    if (!result.success) {
       return NextResponse.json(
         {
-          code: "DATABASE_ERROR",
-          message: "数据库写入失败"
+          code: result.error.code,
+          message: result.error.message,
+          ...(result.error.errorCode ? { errorCode: result.error.errorCode } : {}),
         },
-        { status: 500 }
+        { status: result.error.status }
       );
     }
+
+    const responseAsset = await serializeAsset(result.asset, {
+      onAccessUrlError: (error) => {
+        console.error("Failed to generate presigned URL:", error);
+      },
+    });
+
+    return success({ asset: responseAsset }, "素材上传成功");
   } catch (error) {
     console.error("Upload asset error:", error);
     return NextResponse.json(
