@@ -214,6 +214,7 @@ model Asset {
   consents         AssetConsent[]
   referenceSources ReferenceSource[]
   sourceAvatars    Avatar[]
+  voiceSamples     VoiceSample[]
 
   @@index([teamId, createdAt])
   @@index([teamId, type])
@@ -269,17 +270,19 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  ownedTeams      Team[]         @relation("TeamOwner")
+  ownedTeams      Team[]          @relation("TeamOwner")
   teamMemberships TeamMember[]
-  ownedProjects   Project[]      @relation("ProjectOwner")
-  uploadedAssets  Asset[]        @relation("AssetOwner")
+  ownedProjects   Project[]       @relation("ProjectOwner")
+  uploadedAssets  Asset[]         @relation("AssetOwner")
   assetConsents   AssetConsent[]
   auditLogs       AuditLog[]
-  videoJobs       VideoJob[]     @relation("VideoJobOwner")
-  ownedVoices     Voice[]        @relation("VoiceOwner")
-  ownedAvatars    Avatar[]       @relation("AvatarOwner")
+  videoJobs       VideoJob[]      @relation("VideoJobOwner")
+  ownedVoices     Voice[]         @relation("VoiceOwner")
+  voiceSamples    VoiceSample[]   @relation("VoiceSampleOwner")
+  voiceConsents   VoiceConsent[]
+  ownedAvatars    Avatar[]        @relation("AvatarOwner")
   avatarConsents  AvatarConsent[]
-  legalReviews    LegalReview[]  @relation("LegalReviewOwner")
+  legalReviews    LegalReview[]   @relation("LegalReviewOwner")
 
   @@map("users")
 }
@@ -297,6 +300,7 @@ model Team {
   videoJobs        VideoJob[]
   referenceSources ReferenceSource[]
   voices           Voice[]
+  voiceSamples     VoiceSample[]
   avatars          Avatar[]
   legalReviews     LegalReview[]
 
@@ -350,13 +354,13 @@ model VideoJob {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  owner     User           @relation("VideoJobOwner", fields: [ownerId], references: [id])
-  nodes     WorkflowNode[]
-  artifacts Artifact[]
-  scripts   Script[]
-  ttsRequests TtsRequest[]
+  project      Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  team         Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner        User           @relation("VideoJobOwner", fields: [ownerId], references: [id])
+  nodes        WorkflowNode[]
+  artifacts    Artifact[]
+  scripts      Script[]
+  ttsRequests  TtsRequest[]
   legalReviews LegalReview[]
 
   @@index([projectId])
@@ -383,9 +387,10 @@ model WorkflowNode {
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
-  job       VideoJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  artifacts Artifact[]
-  ttsRequests TtsRequest[]
+  job           VideoJob       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  artifacts     Artifact[]
+  ttsRequests   TtsRequest[]
+  voiceCloneJob VoiceCloneJob?
 
   @@index([jobId])
   @@index([jobId, nodeType])
@@ -403,8 +408,8 @@ model Artifact {
   metadata   Json?
   createdAt  DateTime @default(now())
 
-  job  VideoJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  node WorkflowNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  job         VideoJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  node        WorkflowNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
   ttsRequests TtsRequest[]
 
   @@index([jobId])
@@ -455,14 +460,14 @@ model Script {
 }
 
 model ReferenceSource {
-  id                 String                @id @default(cuid())
+  id                 String                 @id @default(cuid())
   projectId          String
   teamId             String
   sourceType         ReferenceSourceType
   platform           String?
   sourceUrl          String?
   assetId            String?
-  status             ReferenceSourceStatus @default(pending)
+  status             ReferenceSourceStatus  @default(pending)
   durationMs         Int?
   transcriptScriptId String?
   title              String?
@@ -475,8 +480,8 @@ model ReferenceSource {
   consentConfirmedBy String?
   structureJson      Json?
   errorJson          Json?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
 
   project          Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   team             Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -504,8 +509,8 @@ model ScriptCandidate {
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
 
-  script Script @relation(fields: [scriptId], references: [id], onDelete: Cascade)
-  ttsRequests TtsRequest[]
+  script       Script        @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  ttsRequests  TtsRequest[]
   legalReviews LegalReview[]
 
   @@index([scriptId])
@@ -526,10 +531,10 @@ model LegalReview {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
-  team            Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  owner           User             @relation("LegalReviewOwner", fields: [ownerId], references: [id])
-  scriptCandidate ScriptCandidate  @relation(fields: [scriptCandidateId], references: [id], onDelete: Cascade)
-  job             VideoJob?        @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  team            Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner           User            @relation("LegalReviewOwner", fields: [ownerId], references: [id])
+  scriptCandidate ScriptCandidate @relation(fields: [scriptCandidateId], references: [id], onDelete: Cascade)
+  job             VideoJob?       @relation(fields: [jobId], references: [id], onDelete: SetNull)
   riskItems       LegalRiskItem[]
 
   @@index([teamId, createdAt])
@@ -580,15 +585,79 @@ model Voice {
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
 
-  team        Team?        @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  owner       User?        @relation("VoiceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  team        Team?           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner       User?           @relation("VoiceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   ttsRequests TtsRequest[]
+  cloneJobs   VoiceCloneJob[] @relation("VoiceCloneOutput")
 
   @@index([teamId, createdAt])
   @@index([teamId, status])
   @@index([voiceType])
   @@index([licenseStatus])
   @@map("voices")
+}
+
+model VoiceSample {
+  id            String   @id @default(cuid())
+  assetId       String
+  teamId        String
+  ownerId       String
+  durationMs    Int?
+  qualityReport Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  asset     Asset           @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  team      Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner     User            @relation("VoiceSampleOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  consents  VoiceConsent[]
+  cloneJobs VoiceCloneJob[]
+
+  @@index([teamId, createdAt])
+  @@index([assetId])
+  @@index([ownerId])
+  @@map("voice_samples")
+}
+
+model VoiceConsent {
+  id            String   @id @default(cuid())
+  voiceSampleId String
+  teamId        String
+  userId        String
+  consentText   String
+  usageScope    String[]
+  ipAddress     String?
+  device        Json?
+  createdAt     DateTime @default(now())
+
+  voiceSample VoiceSample @relation(fields: [voiceSampleId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([voiceSampleId])
+  @@index([teamId])
+  @@index([userId])
+  @@map("voice_consents")
+}
+
+model VoiceCloneJob {
+  id             String             @id @default(cuid())
+  workflowNodeId String             @unique
+  voiceSampleId  String
+  provider       String
+  status         WorkflowNodeStatus @default(queued)
+  outputVoiceId  String?
+  errorJson      Json?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  workflowNode WorkflowNode @relation(fields: [workflowNodeId], references: [id], onDelete: Cascade)
+  voiceSample  VoiceSample  @relation(fields: [voiceSampleId], references: [id], onDelete: Cascade)
+  outputVoice  Voice?       @relation("VoiceCloneOutput", fields: [outputVoiceId], references: [id], onDelete: SetNull)
+
+  @@index([voiceSampleId])
+  @@index([outputVoiceId])
+  @@index([status])
+  @@map("voice_clone_jobs")
 }
 
 model TtsRequest {
@@ -623,21 +692,21 @@ model TtsRequest {
 }
 
 model Avatar {
-  id             String        @id @default(cuid())
-  teamId         String
-  ownerId        String
-  name           String
-  sourceAssetId  String
-  provider       String?
-  status         AvatarStatus  @default(draft)
-  licenseStatus  LicenseStatus @default(pending)
-  qualityReport  Json?
-  previewUrl     String?
-  metadata       Json?
-  isDefault      Boolean       @default(false)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  deletedAt      DateTime?
+  id            String        @id @default(cuid())
+  teamId        String
+  ownerId       String
+  name          String
+  sourceAssetId String
+  provider      String?
+  status        AvatarStatus  @default(draft)
+  licenseStatus LicenseStatus @default(pending)
+  qualityReport Json?
+  previewUrl    String?
+  metadata      Json?
+  isDefault     Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
 
   team        Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
   owner       User            @relation("AvatarOwner", fields: [ownerId], references: [id])

@@ -89,7 +89,7 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | 7 | 系统提取原文、钩子、节奏和卖点 | `voflow-reference-extract`, `voflow-reference-url-import` | done | 上传素材路径已完成；公开链接 metadata 解析、授权确认 API、queued workflow node、字幕结构分析、无字幕音频 reference_extract 衔接、导入审计/阻断、UI 状态确认、测试清单复核、本地运行文档和 Task 14 checkpoint 已完成；结构分析 Worker 和相关测试 | 需在最终 MVP 环境复验 |
 | 8 | 系统生成改写文案和标题候选 | `voflow-script-ai` | done | 文案改写、标题生成、风险检查测试 | 需在最终 MVP 环境复验 |
 | 9 | 系统执行 AI 法务审查，给出风险原因和替换建议 | `voflow-legal-review` | done | 法务审查 API/service 测试 | 需在最终 MVP 环境复验 |
-| 10 | 用户选择预置音色或克隆音色生成语音 | `voflow-tts`, `voflow-voice-clone` | partial | 预置音色 TTS 已完成；`voflow-voice-clone` Task 0 开发规范检查和任务执行判断已完成 | `voflow-voice-clone` Task 1-11 待实现 |
+| 10 | 用户选择预置音色或克隆音色生成语音 | `voflow-tts`, `voflow-voice-clone` | partial | 预置音色 TTS 已完成；`voflow-voice-clone` Task 0 开发规范检查和任务执行判断已完成；Task 1 已创建 `voice_samples`、`voice_consents`、`voice_clone_jobs`，并复用已有 `voices` 主表 | `voflow-voice-clone` Task 2-11 待实现 |
 | 11 | 系统使用我的数字人生成口播视频 | `voflow-video-render` | not_started | - | Spec 未开始 |
 | 12 | 系统合成字幕、BGM、画中画、封面和最终 MP4 | `voflow-advanced-editing`, `voflow-packaging-export` | not_started | - | Spec 未开始 |
 | 13 | 系统生成各平台标题、标签、描述、话题 | `voflow-publish-assistant` | not_started | - | Spec 未开始 |
@@ -111,8 +111,8 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 当前唯一开发入口：
 
 - Active Spec: `voflow-voice-clone`
-- Active Scope: 声音克隆开发规范检查与任务启动
-- Active Focus: Task 1 创建声音克隆数据表：`voice_samples`、`voice_consents`、`voice_clone_jobs`
+- Active Scope: 声音克隆数据模型已创建
+- Active Focus: Task 2 实现声音样本上传：复用 asset upload、限定音频格式、保存 voice_sample metadata
 - Status: `ready_for_next_task`
 
 未完成当前游标前，不允许并行启动以下新 Spec：
@@ -146,7 +146,7 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | `voflow-legal-review` | done | 最终 MVP 环境复验 |
 | `voflow-tts` | done | 与 voice clone 和 avatar render 联调 |
 | `voflow-self-avatar` | done | 最终 MVP 环境复验 |
-| `voflow-voice-clone` | partial | 继续 Task 1：创建声音克隆数据表 |
+| `voflow-voice-clone` | partial | 继续 Task 2：实现声音样本上传 |
 | `voflow-video-render` | not_started | 依赖 voice clone/self-avatar/workflow |
 | `voflow-advanced-editing` | not_started | 依赖 video render |
 | `voflow-packaging-export` | not_started | 依赖 legal-review/video-render/advanced-editing |

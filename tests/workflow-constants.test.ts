@@ -10,7 +10,25 @@ import {
   type WorkflowNodeDefinition,
 } from "../src/lib/workflow/constants";
 
-const EXPECTED_NODE_ORDER = [
+const EXPECTED_ALL_NODE_TYPES = [
+  "reference_url_import",
+  "reference_extract",
+  "script_prepare",
+  "script_rewrite",
+  "script_title",
+  "legal_review",
+  "voice_clone",
+  "tts",
+  "avatar_render",
+  "editing_preview",
+  "subtitle",
+  "bgm_mix",
+  "cover",
+  "final_export",
+  "publish",
+];
+
+const EXPECTED_DEFAULT_NODE_ORDER = [
   "reference_extract",
   "script_prepare",
   "script_rewrite",
@@ -28,8 +46,8 @@ const EXPECTED_NODE_ORDER = [
 ];
 
 describe("WORKFLOW_NODE_TYPES", () => {
-  it("should have 14 nodes in correct order", () => {
-    expect(WORKFLOW_NODE_TYPES).toEqual(EXPECTED_NODE_ORDER);
+  it("should include optional adapter nodes and default nodes in correct order", () => {
+    expect(WORKFLOW_NODE_TYPES).toEqual(EXPECTED_ALL_NODE_TYPES);
   });
 
   it("should have unique node types", () => {
@@ -38,8 +56,8 @@ describe("WORKFLOW_NODE_TYPES", () => {
 });
 
 describe("DEFAULT_WORKFLOW_TEMPLATE", () => {
-  it("should match WORKFLOW_NODE_TYPES order", () => {
-    expect(DEFAULT_WORKFLOW_TEMPLATE).toEqual(WORKFLOW_NODE_TYPES);
+  it("should keep optional adapter nodes out of the default workflow", () => {
+    expect(DEFAULT_WORKFLOW_TEMPLATE).toEqual(EXPECTED_DEFAULT_NODE_ORDER);
   });
 });
 
@@ -59,9 +77,9 @@ describe("WORKFLOW_NODE_DEFINITIONS", () => {
     });
   });
 
-  it("should have orders from 1 to 14 consecutively", () => {
+  it("should keep the optional reference_url_import adapter at order 0 and default nodes from 1 to 14", () => {
     const orders = WORKFLOW_NODE_TYPES.map((type) => WORKFLOW_NODE_DEFINITIONS[type].order);
-    expect(orders).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(orders).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
   });
 
   it("should mark legal_review, voice_clone, editing_preview, publish as requiresApproval: true", () => {
@@ -158,7 +176,7 @@ describe("getDefaultWorkflowNodes", () => {
     const nodes = getDefaultWorkflowNodes();
     expect(nodes.length).toBe(14);
     nodes.forEach((node, index) => {
-      expect(node.type).toBe(WORKFLOW_NODE_TYPES[index]);
+      expect(node.type).toBe(DEFAULT_WORKFLOW_TEMPLATE[index]);
       expect(node.order).toBe(index + 1);
     });
   });

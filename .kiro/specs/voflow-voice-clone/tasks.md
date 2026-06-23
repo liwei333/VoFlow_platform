@@ -10,7 +10,7 @@
   - Checkpoint 反馈必须包含硬编码检查、公共函数提取情况和验证命令
   - _Requirements: US-1, US-2, US-3, US-4_
 
-- [ ] 1. 创建声音克隆数据表
+- [x] 1. 创建声音克隆数据表
   - 创建 `voice_samples`
   - 创建 `voice_consents`
   - 创建 `voice_clone_jobs`
@@ -123,3 +123,59 @@
 - 是否满足对应 Acceptance Criteria：满足启动新 Spec 前的规范检查和任务执行判断；US-1 到 US-4 的业务实现从 Task 1 开始。
 - 是否允许勾选：允许勾选 Task 0，不允许勾选 Task 1-11。
 - MVP 状态矩阵是否需要同步更新：需要，`voflow-voice-clone` 从 `not_started` 进入 `partial`，下一步为 Task 1 创建声音克隆数据表。
+
+### Task 1: 创建声音克隆数据表
+
+### 任务
+- Spec: `voflow-voice-clone`
+- Task: 1
+- Requirements: US-1、US-2、US-3
+
+### 修改文件
+- `prisma/schema.prisma`
+- `prisma/migrations/20260623102000_add_voice_clone_models/migration.sql`
+- `tests/voice-clone-schema.test.ts`
+- `tests/workflow-constants.test.ts`
+- `.kiro/specs/voflow-voice-clone/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：新增声音克隆专属 `VoiceSample`、`VoiceConsent`、`VoiceCloneJob` Prisma 模型，并创建对应 `voice_samples`、`voice_consents`、`voice_clone_jobs` migration。
+- 明确未完成：未实现样本上传 API、质量检测、授权确认 API、训练任务创建、trainer adapter 或 UI。
+- 是否使用 mock/provider/adapter 占位：否，本轮只完成数据库结构。
+- 避免重复建表：继续复用 TTS Spec 已有 `Voice`、`VoiceType.cloned`、`VoiceStatus` 和 `voices` 表；本轮没有新增 cloned voice 主表。
+
+### TDD 记录
+- RED: 先新增 `tests/voice-clone-schema.test.ts`，运行 `npm run test:run -- tests/voice-clone-schema.test.ts` 失败，原因是本地数据库只有既有 `voices` 表，缺少 `voice_samples`、`voice_consents`、`voice_clone_jobs`。
+- GREEN: 补充 Prisma schema 和 migration，执行 `npx prisma migrate deploy` 后，`tests/voice-clone-schema.test.ts` 通过，1 file / 3 tests。
+
+### 数据模型说明
+- `voice_samples` 关联 `assets`、`teams`、`users`，保存 `durationMs` 和 `qualityReport`，为后续样本上传和质量检测提供落点。
+- `voice_consents` 关联 `voice_samples` 和 `users`，保存 `consentText`、`usageScope`、`ipAddress`、`device`，为后续声音授权提供落点。
+- `voice_clone_jobs` 关联 `workflow_nodes`、`voice_samples`，可选关联输出 `voices`，复用 `WorkflowNodeStatus` 表示训练状态。
+- `voice_clone_jobs.workflowNodeId` 使用唯一索引，保证一个 workflow node 对应一个声音克隆 job。
+
+### 硬编码检查
+- 是否新增运行时硬编码：否，本轮只新增 Prisma schema、migration 和测试。
+- 新增配置是否收口：本轮未新增配置。
+- 新增错误码/状态/枚举是否收口：未新增错误码；训练状态复用已有 `WorkflowNodeStatus`，避免新增重复 enum。
+
+### 公共化检查
+- 复用的公共模块：已有 `Voice`/`VoiceType.cloned`/`VoiceStatus`、`Asset`、`WorkflowNode`、`LicenseStatus`、`WorkflowNodeStatus`。
+- 新增的公共函数/service：无。
+- 后续需要抽取的重复逻辑：Task 2-4 应新增或复用 voice clone 常量/config 来收口样本格式、时长/质量阈值、授权 scope 和错误码。
+
+### 验证命令
+- RED: `npm run test:run -- tests/voice-clone-schema.test.ts`: 失败，缺少三张声音克隆表。
+- `npx prisma format --schema prisma/schema.prisma`: 通过。
+- `npx prisma validate --schema prisma/schema.prisma`: 通过。
+- `npx prisma migrate deploy`: 通过，应用 `20260623102000_add_voice_clone_models`。
+- `npm run db:generate`: 通过。
+- `npm run test:run -- tests/voice-clone-schema.test.ts`: 通过，1 file / 3 tests。
+- `npm run test:run -- tests/voice-clone-schema.test.ts tests/tts-service.test.ts tests/tts-api.test.ts tests/tts-worker-service.test.ts tests/workflow-constants.test.ts tests/avatar-schema.test.ts`: 通过，6 files / 31 tests。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 1。
+- 是否满足对应 Acceptance Criteria：满足 US-1、US-2、US-3 所需数据库落点，且不重复创建已有 `voices` 主表。
+- 是否允许勾选：允许勾选 Task 1，不允许勾选 Task 2-11。
+- MVP 状态矩阵是否需要同步更新：需要，`voflow-voice-clone` 继续保持 `partial`，下一步为 Task 2 实现声音样本上传。
