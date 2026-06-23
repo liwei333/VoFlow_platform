@@ -100,7 +100,7 @@ export const mockAvatarPhotoDetector: AvatarPhotoDetector = {
   },
 };
 
-export type AvatarPhotoDetectorEnv = {
+export type AvatarPhotoDetectorEnv = Record<string, string | undefined> & {
   AVATAR_PHOTO_DETECTOR_PROVIDER?: string;
   AVATAR_PHOTO_DETECTOR_TIMEOUT_MS?: string;
 };

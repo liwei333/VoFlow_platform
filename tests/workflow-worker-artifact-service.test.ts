@@ -24,10 +24,64 @@ describe("executeWorkflowNode", () => {
     const handlers = createDefaultWorkflowNodeHandlers();
 
     expect(handlers.reference_extract).toBeTypeOf("function");
+    expect(handlers.reference_url_import).toBeTypeOf("function");
     expect(handlers.script_prepare).toBeTypeOf("function");
     expect(handlers.script_rewrite).toBeTypeOf("function");
     expect(handlers.script_title).toBeTypeOf("function");
     expect(handlers.legal_review).toBeTypeOf("function");
+  });
+
+  it("keeps audio extraction deferred to the mode-specific task", async () => {
+    const calls: unknown[] = [];
+    const repository = createExecutionRepository(calls, {
+      sourceType: "reference_url_import",
+      referenceSourceId: "ref-1",
+      projectId: "project-1",
+      teamId: "team-1",
+      userId: "user-1",
+      sourceUrl: "https://www.youtube.com/watch?v=demo",
+      platform: "youtube",
+      importMode: "audio_extract",
+    });
+    const payload: WorkflowQueuePayload = {
+      jobId: "job-1",
+      nodeId: "node-1",
+      nodeType: "reference_url_import",
+      version: 1,
+      traceId: "trace-reference-url",
+    };
+
+    const result = await executeWorkflowNode(payload, {
+      repository,
+      handlers: createDefaultWorkflowNodeHandlers(),
+      now: () => new Date("2026-06-23T00:00:00.000Z"),
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: {
+        output: {
+          sourceType: "reference_url_import",
+          referenceSourceId: "ref-1",
+          importMode: "audio_extract",
+          stage: "importing",
+          status: "deferred_to_audio_extract_task",
+        },
+      },
+    });
+    expect(calls.at(-1)).toEqual({
+      markSucceeded: {
+        nodeId: "node-1",
+        output: {
+          sourceType: "reference_url_import",
+          referenceSourceId: "ref-1",
+          importMode: "audio_extract",
+          stage: "importing",
+          status: "deferred_to_audio_extract_task",
+        },
+        finishedAt: new Date("2026-06-23T00:00:00.000Z"),
+      },
+    });
   });
 
   it("runs the matching handler and marks the node succeeded with output", async () => {
@@ -229,11 +283,14 @@ describe("writeWorkflowArtifact", () => {
   });
 });
 
-function createExecutionRepository(calls: unknown[]): WorkflowNodeExecutionRepository {
+function createExecutionRepository(
+  calls: unknown[],
+  input: unknown = { script: "hello" }
+): WorkflowNodeExecutionRepository {
   return {
     findNodeForExecution: async () => ({
       id: "node-1",
-      input: { script: "hello" },
+      input,
     }),
     markRunning: async (nodeId, startedAt) => {
       calls.push({ markRunning: { nodeId, startedAt } });

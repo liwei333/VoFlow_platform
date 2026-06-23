@@ -1,0 +1,13 @@
+{
+  "featureName": "voflow-reference-url-import",
+  "specType": "feature",
+  "workflowType": "requirements-first",
+  "status": "draft",
+  "sessionId": "manual-voflow-reference-url-import-20260622",
+  "depends": [
+    "voflow-reference-extract",
+    "voflow-assets-compliance",
+    "voflow-workflow-engine",
+    "voflow-local-model-monitor"
+  ]
+}

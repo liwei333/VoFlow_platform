@@ -4,6 +4,8 @@ import { createSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { POST as createFromAsset } from "@/app/api/projects/[projectId]/references/from-asset/route";
 import { POST as createFromUrl } from "@/app/api/projects/[projectId]/references/from-url/route";
+import { POST as importReferenceUrl } from "@/app/api/projects/[projectId]/references/[referenceSourceId]/import/route";
+import { POST as parseReferenceUrl } from "@/app/api/projects/[projectId]/references/url/parse/route";
 import { GET as listReferences } from "@/app/api/projects/[projectId]/references/route";
 import { GET as getReference } from "@/app/api/references/[referenceSourceId]/route";
 import { POST as retryReference } from "@/app/api/references/[referenceSourceId]/retry/route";
@@ -11,6 +13,7 @@ import {
   DEFAULT_REFERENCE_LINK_PARSERS,
   type ReferenceLinkParser,
 } from "@/lib/references/parser";
+import { DEFAULT_REFERENCE_URL_IMPORT_PARSERS } from "@/lib/references/url-import/parser";
 
 describe("Reference source API", () => {
   let userId: string;
@@ -286,6 +289,363 @@ describe("Reference source API", () => {
     } finally {
       DEFAULT_REFERENCE_LINK_PARSERS.douyin = originalParser;
     }
+  });
+
+  it("rejects real reference URL import when the feature flag is disabled", async () => {
+    const previousEnabled = process.env.VOFLOW_REFERENCE_LINK_IMPORT_ENABLED;
+    process.env.VOFLOW_REFERENCE_LINK_IMPORT_ENABLED = "false";
+
+    try {
+      const response = await parseReferenceUrl(
+        await createAuthenticatedRequest(`/api/projects/${projectId}/references/url/parse`, {
+          sourceUrl: "https://www.youtube.com/watch?v=demo",
+        }),
+        { params: Promise.resolve({ projectId }) }
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        code: "REFERENCE_URL_IMPORT_DISABLED",
+        message: "真实参考链接导入未启用，请上传视频/音频或粘贴文案。",
+        data: {
+          fallback: {
+            action: "upload_media_or_paste_text",
+          },
+        },
+      });
+    } finally {
+      restoreEnv("VOFLOW_REFERENCE_LINK_IMPORT_ENABLED", previousEnabled);
+    }
+  });
+
+  it("creates or updates metadata_ready reference sources through the real URL parse endpoint", async () => {
+    const previousEnabled = process.env.VOFLOW_REFERENCE_LINK_IMPORT_ENABLED;
+    const previousAllowedPlatforms = process.env.VOFLOW_REFERENCE_ALLOWED_PLATFORMS;
+    const originalParser = DEFAULT_REFERENCE_URL_IMPORT_PARSERS.youtube;
+    process.env.VOFLOW_REFERENCE_LINK_IMPORT_ENABLED = "true";
+    process.env.VOFLOW_REFERENCE_ALLOWED_PLATFORMS = "youtube,bilibili";
+    DEFAULT_REFERENCE_URL_IMPORT_PARSERS.youtube = {
+      parse: vi.fn().mockResolvedValue({
+        title: "YouTube 参考",
+        durationMs: 45_000,
+        thumbnailUrl: "https://cdn.example.com/thumb.jpg",
+        raw: {
+          metadata: {
+            extractor: "Youtube",
+            subtitles: { zh: [{ ext: "vtt", url: "https://caption.example.com/zh.vtt" }] },
+            automaticCaptions: {},
+            rawSummary: { id: "demo" },
+          },
+        },
+      }),
+    };
+
+    try {
+      const response = await parseReferenceUrl(
+        await createAuthenticatedRequest(`/api/projects/${projectId}/references/url/parse`, {
+          sourceUrl: "https://www.youtube.com/watch?v=demo",
+        }),
+        { params: Promise.resolve({ projectId }) }
+      );
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toMatchObject({
+        code: "SUCCESS",
+        message: "参考链接 metadata 已解析",
+        data: {
+          referenceSource: {
+            projectId,
+            teamId,
+            sourceType: "url",
+            platform: "youtube",
+            sourceUrl: "https://www.youtube.com/watch?v=demo",
+            status: "metadata_ready",
+            durationMs: 45_000,
+            title: "YouTube 参考",
+            thumbnailUrl: "https://cdn.example.com/thumb.jpg",
+            importMode: "metadata_only",
+            consentStatus: "pending",
+            structureJson: null,
+            metadataJson: {
+              extractor: "Youtube",
+              subtitles: {
+                zh: [{ ext: "vtt", url: "https://caption.example.com/zh.vtt" }],
+              },
+            },
+          },
+        },
+      });
+      referenceSourceIds.push(body.data.referenceSource.id);
+
+      const saved = await prisma.referenceSource.findUnique({
+        where: { id: body.data.referenceSource.id },
+      });
+      expect(saved).toMatchObject({
+        title: "YouTube 参考",
+        thumbnailUrl: "https://cdn.example.com/thumb.jpg",
+        status: "metadata_ready",
+        importMode: "metadata_only",
+        consentStatus: "pending",
+      });
+      expect(saved?.structureJson).toBeNull();
+    } finally {
+      DEFAULT_REFERENCE_URL_IMPORT_PARSERS.youtube = originalParser;
+      restoreEnv("VOFLOW_REFERENCE_LINK_IMPORT_ENABLED", previousEnabled);
+      restoreEnv("VOFLOW_REFERENCE_ALLOWED_PLATFORMS", previousAllowedPlatforms);
+    }
+  });
+
+  it("rejects real reference URL import when the detected platform is not allowlisted", async () => {
+    const previousEnabled = process.env.VOFLOW_REFERENCE_LINK_IMPORT_ENABLED;
+    const previousAllowedPlatforms = process.env.VOFLOW_REFERENCE_ALLOWED_PLATFORMS;
+    process.env.VOFLOW_REFERENCE_LINK_IMPORT_ENABLED = "true";
+    process.env.VOFLOW_REFERENCE_ALLOWED_PLATFORMS = "bilibili";
+
+    try {
+      const response = await parseReferenceUrl(
+        await createAuthenticatedRequest(`/api/projects/${projectId}/references/url/parse`, {
+          sourceUrl: "https://www.youtube.com/watch?v=demo",
+        }),
+        { params: Promise.resolve({ projectId }) }
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        code: "REFERENCE_URL_PLATFORM_UNSUPPORTED",
+        message: "不支持该参考链接平台，请改用上传视频/音频或粘贴文案。",
+        data: {
+          platform: "youtube",
+          fallback: {
+            action: "upload_media_or_paste_text",
+          },
+        },
+      });
+    } finally {
+      restoreEnv("VOFLOW_REFERENCE_LINK_IMPORT_ENABLED", previousEnabled);
+      restoreEnv("VOFLOW_REFERENCE_ALLOWED_PLATFORMS", previousAllowedPlatforms);
+    }
+  });
+
+  it("confirms metadata-only reference URL import without requiring consent text", async () => {
+    const referenceSource = await createMetadataReadyReferenceSource({
+      metadataJson: {
+        extractor: "Youtube",
+        rawSummary: { id: "demo" },
+      },
+    });
+
+    const response = await importReferenceUrl(
+      await createAuthenticatedRequest(
+        `/api/projects/${projectId}/references/${referenceSource.id}/import`,
+        {
+          importMode: "metadata_only",
+        }
+      ),
+      { params: Promise.resolve({ projectId, referenceSourceId: referenceSource.id }) }
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      code: "SUCCESS",
+      message: "参考链接导入确认已保存",
+      data: {
+        referenceSource: {
+          id: referenceSource.id,
+          projectId,
+          teamId,
+          status: "succeeded",
+          importMode: "metadata_only",
+          consentStatus: "confirmed",
+          consentConfirmedBy: userId,
+          metadataJson: {
+            extractor: "Youtube",
+            importConsent: {
+              importMode: "metadata_only",
+              sourceUrl: "https://www.youtube.com/watch?v=demo",
+              platform: "youtube",
+              durationMs: 45_000,
+              userId,
+              teamId,
+            },
+          },
+        },
+      },
+    });
+    expect(body.data.referenceSource.consentConfirmedAt).toBeTruthy();
+
+    await expect(
+      prisma.referenceSource.findUnique({ where: { id: referenceSource.id } })
+    ).resolves.toMatchObject({
+      status: "succeeded",
+      importMode: "metadata_only",
+      consentStatus: "confirmed",
+      consentConfirmedBy: userId,
+    });
+  });
+
+  it("requires reference-analysis-only consent for subtitle import", async () => {
+    const referenceSource = await createMetadataReadyReferenceSource({
+      subtitleJson: {
+        subtitles: { zh: [{ ext: "vtt", url: "https://caption.example.com/zh.vtt" }] },
+      },
+    });
+
+    const response = await importReferenceUrl(
+      await createAuthenticatedRequest(
+        `/api/projects/${projectId}/references/${referenceSource.id}/import`,
+        {
+          importMode: "subtitle_only",
+          consentTextVersion: "reference-consent-v1",
+          consentConfirmed: false,
+        }
+      ),
+      { params: Promise.resolve({ projectId, referenceSourceId: referenceSource.id }) }
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      code: "REFERENCE_IMPORT_CONSENT_REQUIRED",
+      message: "请先确认该公开链接仅用于参考分析。",
+    });
+  });
+
+  it("confirms subtitle import consent and enqueues a reference URL import workflow node", async () => {
+    const referenceSource = await createMetadataReadyReferenceSource({
+      subtitleJson: {
+        subtitles: { zh: [{ ext: "vtt", url: "https://caption.example.com/zh.vtt" }] },
+      },
+    });
+
+    const response = await importReferenceUrl(
+      await createAuthenticatedRequest(
+        `/api/projects/${projectId}/references/${referenceSource.id}/import`,
+        {
+          importMode: "subtitle_only",
+          consentTextVersion: "reference-consent-v1",
+          consentConfirmed: true,
+        }
+      ),
+      { params: Promise.resolve({ projectId, referenceSourceId: referenceSource.id }) }
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      code: "SUCCESS",
+      data: {
+        referenceSource: {
+          id: referenceSource.id,
+          status: "pending",
+          importMode: "subtitle_only",
+          consentStatus: "confirmed",
+          consentConfirmedBy: userId,
+          metadataJson: {
+            importConsent: {
+              consentTextVersion: "reference-consent-v1",
+              importMode: "subtitle_only",
+              sourceUrl: "https://www.youtube.com/watch?v=demo",
+              platform: "youtube",
+              userId,
+              teamId,
+            },
+          },
+        },
+        nextStep: {
+          nodeType: "reference_url_import",
+          status: "queued",
+        },
+      },
+    });
+    jobIds.push(body.data.job.id);
+    expect(body.data.job).toMatchObject({
+      projectId,
+      teamId,
+      ownerId: userId,
+      status: "queued",
+      currentNode: "reference_url_import",
+    });
+    expect(body.data.node).toMatchObject({
+      jobId: body.data.job.id,
+      nodeType: "reference_url_import",
+      status: "queued",
+      version: 1,
+      input: {
+        sourceType: "reference_url_import",
+        referenceSourceId: referenceSource.id,
+        projectId,
+        teamId,
+        userId,
+        sourceUrl: "https://www.youtube.com/watch?v=demo",
+        platform: "youtube",
+        importMode: "subtitle_only",
+      },
+    });
+
+    const savedNode = await prisma.workflowNode.findUnique({
+      where: { id: body.data.node.id },
+    });
+    expect(savedNode?.input).toMatchObject({
+      sourceType: "reference_url_import",
+      referenceSourceId: referenceSource.id,
+      importMode: "subtitle_only",
+    });
+  });
+
+  it("rejects audio extraction confirmation when audio extraction is disabled", async () => {
+    const previousAllowAudioExtract = process.env.VOFLOW_REFERENCE_ALLOW_AUDIO_EXTRACT;
+    process.env.VOFLOW_REFERENCE_ALLOW_AUDIO_EXTRACT = "false";
+    const referenceSource = await createMetadataReadyReferenceSource();
+
+    try {
+      const response = await importReferenceUrl(
+        await createAuthenticatedRequest(
+          `/api/projects/${projectId}/references/${referenceSource.id}/import`,
+          {
+            importMode: "audio_extract",
+            consentTextVersion: "reference-consent-v1",
+            consentConfirmed: true,
+          }
+        ),
+        { params: Promise.resolve({ projectId, referenceSourceId: referenceSource.id }) }
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        code: "REFERENCE_AUDIO_EXTRACT_DISABLED",
+        message: "参考链接音频提取未启用，请改用字幕或上传素材。",
+      });
+    } finally {
+      restoreEnv("VOFLOW_REFERENCE_ALLOW_AUDIO_EXTRACT", previousAllowAudioExtract);
+    }
+  });
+
+  it("does not confirm reference URL import from another team", async () => {
+    const otherReferenceSource = await prisma.referenceSource.create({
+      data: {
+        projectId: otherProjectId,
+        teamId: otherTeamId,
+        sourceType: "url",
+        platform: "youtube",
+        sourceUrl: "https://www.youtube.com/watch?v=other",
+        status: "metadata_ready",
+        importMode: "metadata_only",
+      },
+    });
+    referenceSourceIds.push(otherReferenceSource.id);
+
+    const response = await importReferenceUrl(
+      await createAuthenticatedRequest(
+        `/api/projects/${projectId}/references/${otherReferenceSource.id}/import`,
+        {
+          importMode: "metadata_only",
+        }
+      ),
+      { params: Promise.resolve({ projectId, referenceSourceId: otherReferenceSource.id }) }
+    );
+
+    expect(response.status).toBe(404);
   });
 
   it("returns reference source status, error, transcript, and structure for polling", async () => {
@@ -691,5 +1051,42 @@ describe("Reference source API", () => {
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+  }
+
+  async function createMetadataReadyReferenceSource(options: {
+    metadataJson?: Record<string, unknown>;
+    subtitleJson?: Record<string, unknown>;
+  } = {}) {
+    const referenceSource = await prisma.referenceSource.create({
+      data: {
+        projectId,
+        teamId,
+        sourceType: "url",
+        platform: "youtube",
+        sourceUrl: "https://www.youtube.com/watch?v=demo",
+        status: "metadata_ready",
+        durationMs: 45_000,
+        title: "YouTube 参考",
+        thumbnailUrl: "https://cdn.example.com/thumb.jpg",
+        metadataJson: options.metadataJson ?? {
+          extractor: "Youtube",
+          rawSummary: { id: "demo" },
+        },
+        subtitleJson: options.subtitleJson ?? {},
+        importMode: "metadata_only",
+        consentStatus: "pending",
+      },
+    });
+    referenceSourceIds.push(referenceSource.id);
+    return referenceSource;
+  }
+
+  function restoreEnv(key: string, value: string | undefined) {
+    if (value === undefined) {
+      delete process.env[key];
+      return;
+    }
+
+    process.env[key] = value;
   }
 });

@@ -66,6 +66,18 @@
           "description": "实现爆款链接导入、平台识别、音视频解析、ASR 转写、钩子节奏卖点提取"
         },
         {
+          "featureName": "voflow-reference-url-import",
+          "specType": "feature",
+          "workflowType": "requirements-first",
+          "depends": [
+            "voflow-reference-extract",
+            "voflow-assets-compliance",
+            "voflow-workflow-engine",
+            "voflow-local-model-monitor"
+          ],
+          "description": "基于 yt-dlp 实现公开参考链接 metadata、字幕、授权后音频导入，并复用现有爆款结构分析链路"
+        },
+        {
           "featureName": "voflow-script-ai",
           "specType": "feature",
           "workflowType": "requirements-first",

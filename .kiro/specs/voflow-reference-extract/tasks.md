@@ -65,3 +65,13 @@
   - 系统生成原文、平台、时长、结构分析
   - 失败时给出上传兜底路径
   - _Requirements: US-1, US-2, US-3_
+
+## Change Log
+
+### Change: 2026-06-22 - 真实参考链接导入拆分为独立增强 Spec
+
+- 当前 `voflow-reference-extract` 已完成平台识别、失败兜底、上传素材提取、ASR 转写和结构分析。
+- 真实公开链接 metadata、字幕和授权后音频导入不追加到本 Spec，拆分为 `voflow-reference-url-import`。
+- 原因：yt-dlp 接入涉及外部 binary、字幕/音频下载、授权、审计、时长限制、文件大小限制和 Worker 编排，已超出原 Checkpoint 9 的验收边界。
+- 后续依赖：`voflow-reference-url-import` 复用本 Spec 的 `ReferenceSource`、`reference_extract`、ASR 和结构分析能力。
+- 状态口径：本 Spec 的 done 表示上传素材路径和链接失败兜底路径完成，不表示公开链接真实导入能力已完成。

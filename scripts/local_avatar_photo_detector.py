@@ -47,7 +47,7 @@ def classify_exposure(
     bright_ratio: float = 0,
     dark_ratio: float = 0,
 ) -> str:
-    if bright_ratio >= 0.35 or average_luminance >= 225:
+    if bright_ratio >= 0.05 or average_luminance >= 225:
         return "overexposed"
     if dark_ratio >= 0.45 or average_luminance <= 35:
         return "underexposed"
@@ -117,7 +117,7 @@ def analyze_image(image_bytes: bytes) -> dict[str, Any]:
     grayscale.thumbnail((256, 256))
     pixel_rows = [list(grayscale.crop((0, y, grayscale.width, y + 1)).getdata()) for y in range(grayscale.height)]
     blur_score = estimate_blur_score(pixel_rows)
-    exposure = estimate_exposure(analysis_image)
+    exposure = combine_exposure(estimate_exposure(image), estimate_exposure(analysis_image))
 
     return build_detection_response(
         face_count=len(faces),
@@ -182,6 +182,12 @@ def estimate_exposure(image: Image.Image) -> str:
     dark_ratio = sum(histogram[:30]) / total_pixels
     bright_ratio = sum(histogram[235:]) / total_pixels
     return classify_exposure(average_luminance, bright_ratio, dark_ratio)
+
+
+def combine_exposure(global_exposure: str, face_exposure: str) -> str:
+    if face_exposure != "normal":
+        return face_exposure
+    return global_exposure
 
 
 def to_degrees(value: Any) -> float:

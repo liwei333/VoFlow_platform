@@ -17,6 +17,7 @@ class LocalAvatarPhotoDetectorTest(unittest.TestCase):
     def test_classifies_exposure_from_average_luminance(self):
         self.assertEqual(detector.classify_exposure(18), "underexposed")
         self.assertEqual(detector.classify_exposure(128), "normal")
+        self.assertEqual(detector.classify_exposure(128, bright_ratio=0.06), "overexposed")
         self.assertEqual(detector.classify_exposure(238), "overexposed")
 
     def test_estimates_blur_score_from_laplacian_variance(self):

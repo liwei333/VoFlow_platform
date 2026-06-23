@@ -94,7 +94,7 @@ export async function checkAndUpdateLocalModelService(serviceType: LocalModelSer
       status: result.status,
       latencyMs: result.latencyMs,
       checkedAt: result.checkedAt,
-      lastError: toPrismaJson(buildLastError(result)),
+      lastError: toNullablePrismaJson(buildLastError(result)),
     },
   });
 }
@@ -110,6 +110,14 @@ export async function checkAndUpdateAllLocalModelServices() {
 function toPrismaJson(value: unknown): Prisma.InputJsonValue | undefined {
   if (value === undefined || value === null) {
     return undefined;
+  }
+
+  return value as Prisma.InputJsonValue;
+}
+
+function toNullablePrismaJson(value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+  if (value === undefined || value === null) {
+    return Prisma.JsonNull;
   }
 
   return value as Prisma.InputJsonValue;

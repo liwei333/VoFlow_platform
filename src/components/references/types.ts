@@ -1,6 +1,7 @@
 export type ReferenceSourceStatus =
   | "pending"
   | "parsing"
+  | "metadata_ready"
   | "transcribing"
   | "analyzing"
   | "succeeded"

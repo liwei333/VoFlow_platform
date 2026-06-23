@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import AvatarsPage, { getAvatarPreviewDisplay } from "@/app/dashboard/avatars/page";
+import AvatarsPage from "@/app/dashboard/avatars/page";
+import { getAvatarPreviewDisplay } from "@/lib/avatar/ui";
 import {
   AVATAR_CONSENT_USAGE_SCOPE_OPTIONS,
   DEFAULT_AVATAR_CONSENT_TEXT,

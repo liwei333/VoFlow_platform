@@ -99,16 +99,19 @@
   - 删除后列表不返回
   - _Requirements: US-1, US-2, US-3, US-4_
 
-- [ ] 15. Checkpoint: 自拍数字人验收
+- [x] 15. Checkpoint: 自拍数字人验收
   - 用户上传本人正脸照片
   - 系统生成质量报告
   - 用户确认肖像授权
   - 我的数字人列表展示可选数字人
   - 不合格照片给出明确原因
-  - 当前状态：基础上传、授权、avatar 管理、detector 抽象、mock/local provider、真实 `/detect-face` 接入 contract、设为默认能力和真实预览口径已完成；等待真实本地检测服务在线后的最终环境验收
+  - 当前状态：基础上传、授权、avatar 管理、detector 抽象、mock/local provider、真实 `/detect-face` 接入 contract、设为默认能力、真实预览口径和最终环境验收已完成
   - 2026-06-22 验收阻塞：`http://localhost:7000` 当前由 macOS `ControlCenter`/AirTunes 占用，`/health` 和 `/detect-face` 返回 HTTP 403；`local_model_services.avatar` 健康检查为 `offline`，暂不能执行五类真实图片验收
   - 2026-06-22 复验素材已就绪：正脸 `6292f9601227b9c2c2d5577f1558f267.jpg`、多人脸 `683f97b2f23a41d87719c62cbb2f8ee4.jpg`、模糊 `ca87757a2e649061e3126abab1639a4c.jpg`、遮挡/姿态 `a0852587265c179671545e70a975b0fc.jpg`、曝光异常 `99de396cd7784a256cd2f093235b2296.jpg`
   - 2026-06-22 复验阻塞：已设置 `AVATAR_PHOTO_DETECTOR_PROVIDER=local`、`AVATAR_BASE_URL=http://localhost:7010`、`AVATAR_PHOTO_DETECTOR_TIMEOUT_MS=5000` 并同步 `local_model_services.avatar`；健康检查为 `offline`，`POST http://localhost:7010/detect-face` 连接失败，五张图均返回 `AVATAR_PHOTO_DETECTOR_UNAVAILABLE`
+  - 2026-06-22 最终验收：新增并启动 `scripts/local_avatar_photo_detector.py`，基于 macOS Vision 暴露 `GET /health` 和 `POST /detect-face`；`AVATAR_BASE_URL=http://127.0.0.1:7010` 健康检查为 `online` 且 `lastError=null`
+  - 2026-06-22 五类真实图片 route 验收：5 次 `POST /api/avatars/photo-check` 均返回 `200/SUCCESS`；正脸 `passed=true`；多人脸返回 `AVATAR_MULTIPLE_FACES_DETECTED`；模糊返回 `AVATAR_PHOTO_BLURRY`；遮挡/姿态图返回 `AVATAR_FACE_ANGLE_INVALID`/`AVATAR_PHOTO_BLURRY`；曝光图返回 `AVATAR_PHOTO_EXPOSURE_INVALID`
+  - 2026-06-22 完整流程验收：正脸图 `photo-check` 通过后，`POST /api/avatars` 携带肖像授权创建 `ready` avatar 成功，`GET /api/avatars` 返回 1 个可选数字人
   - _Requirements: US-1, US-2, US-3, US-4_
 
 ## 返修项
@@ -201,3 +204,13 @@
 - 影响的 tasks：4、5、6、7、8、14、15。
 - 新增验收命令：`npm run test:run -- tests/avatar-detector.test.ts tests/avatar-photo-check-api.test.ts tests/local-model-config.test.ts`。
 - 后续未完成项：启动真实本地 `/detect-face` 服务后执行 Checkpoint 15 最终环境验收。
+
+### Change: 2026-06-22 - Checkpoint 15 最终环境验收完成
+
+- 新增本地服务脚本：`scripts/local_avatar_photo_detector.py`，通过 macOS Vision 执行真实本机人脸检测，并按既定 contract 输出 `faceCount/yaw/pitch/roll/blurScore/occlusion/exposure`。
+- 新增脚本依赖说明：`scripts/local_avatar_photo_detector_requirements.txt`。
+- 修正本地模型健康状态：健康检查恢复 `online` 时清空旧 `lastError`，避免状态页同时显示 online 和历史错误。
+- 验收环境：`AVATAR_PHOTO_DETECTOR_PROVIDER=local`、`AVATAR_BASE_URL=http://127.0.0.1:7010`、`AVATAR_PHOTO_DETECTOR_TIMEOUT_MS=5000`、MinIO `localhost:9000` 在线。
+- 验收结论：五类真实图片 `POST /api/avatars/photo-check` 口径通过；正脸图完成 `photo-check -> create avatar with consent -> list avatars` 完整流程。
+- 新增验收命令：`/tmp/voflow-avatar-detector-venv/bin/python -m unittest tests/local_avatar_photo_detector_test.py`、`npm run test:run -- tests/local-model-api.test.ts`。
+- 后续未完成项：无；可进入下一个 Spec 启动判断。

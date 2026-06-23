@@ -1,7 +1,10 @@
 /**
  * Workflow node type definitions for voflow-workflow-engine.
  *
- * Node order follows the MVP pipeline sequence:
+ * Optional adapter nodes can feed the MVP pipeline without being part of the
+ * default full-video template.
+ *
+ * Default node order follows the MVP pipeline sequence:
  * 1. reference_extract  - extract reference materials
  * 2. script_prepare     - prepare initial script
  * 3. script_rewrite     - rewrite/polish script
@@ -21,6 +24,7 @@
  */
 
 export const WORKFLOW_NODE_TYPES = [
+  "reference_url_import",
   "reference_extract",
   "script_prepare",
   "script_rewrite",
@@ -50,6 +54,13 @@ export interface WorkflowNodeDefinition {
 }
 
 export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDefinition> = {
+  reference_url_import: {
+    type: "reference_url_import",
+    order: 0,
+    requiresApproval: false,
+    retryable: true,
+    progressWeight: DEFAULT_WORKFLOW_NODE_PROGRESS_WEIGHT,
+  },
   reference_extract: {
     type: "reference_extract",
     order: 1,
@@ -150,7 +161,22 @@ export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDef
   },
 } as const;
 
-export const DEFAULT_WORKFLOW_TEMPLATE: readonly WorkflowNodeType[] = Object.freeze([...WORKFLOW_NODE_TYPES]);
+export const DEFAULT_WORKFLOW_TEMPLATE: readonly WorkflowNodeType[] = Object.freeze([
+  "reference_extract",
+  "script_prepare",
+  "script_rewrite",
+  "script_title",
+  "legal_review",
+  "voice_clone",
+  "tts",
+  "avatar_render",
+  "editing_preview",
+  "subtitle",
+  "bgm_mix",
+  "cover",
+  "final_export",
+  "publish",
+]);
 
 /**
  * Get the definition for a given node type.

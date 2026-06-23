@@ -174,10 +174,24 @@ enum ReferenceSourceType {
 enum ReferenceSourceStatus {
   pending
   parsing
+  metadata_ready
   transcribing
   analyzing
   succeeded
   failed
+}
+
+enum ReferenceImportMode {
+  metadata_only
+  subtitle_only
+  audio_extract
+  uploaded_asset
+}
+
+enum ReferenceConsentStatus {
+  pending
+  confirmed
+  rejected
 }
 
 model Asset {
@@ -450,6 +464,14 @@ model ReferenceSource {
   status             ReferenceSourceStatus @default(pending)
   durationMs         Int?
   transcriptScriptId String?
+  title              String?
+  thumbnailUrl       String?
+  metadataJson       Json?
+  subtitleJson       Json?
+  importMode         ReferenceImportMode?
+  consentStatus      ReferenceConsentStatus @default(pending)
+  consentConfirmedAt DateTime?
+  consentConfirmedBy String?
   structureJson      Json?
   errorJson          Json?
   createdAt          DateTime              @default(now())

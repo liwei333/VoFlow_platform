@@ -7,6 +7,7 @@ export const REFERENCE_UPLOAD_USAGE_SCOPE: AssetUsageScope = "video_generation";
 export type ReferenceSourceStatus =
   | "pending"
   | "parsing"
+  | "metadata_ready"
   | "transcribing"
   | "analyzing"
   | "succeeded"
@@ -28,6 +29,11 @@ const REFERENCE_STATUS_VIEWS: Record<ReferenceSourceStatus, ReferenceStatusView>
     label: "解析中",
     className: "bg-blue-50 text-blue-700 ring-blue-200",
     isActive: true,
+  },
+  metadata_ready: {
+    label: "待确认",
+    className: "bg-cyan-50 text-cyan-700 ring-cyan-200",
+    isActive: false,
   },
   transcribing: {
     label: "转写中",

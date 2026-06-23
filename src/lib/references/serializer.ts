@@ -1,4 +1,11 @@
-import type { AssetType, Prisma, ReferenceSourceStatus, ReferenceSourceType } from "@prisma/client";
+import type {
+  AssetType,
+  Prisma,
+  ReferenceConsentStatus,
+  ReferenceImportMode,
+  ReferenceSourceStatus,
+  ReferenceSourceType,
+} from "@prisma/client";
 
 type ReferenceAssetForSerialization = {
   id: string;
@@ -16,6 +23,14 @@ export type ReferenceSourceForSerialization = {
   assetId: string | null;
   status: ReferenceSourceStatus;
   durationMs: number | null;
+  title?: string | null;
+  thumbnailUrl?: string | null;
+  metadataJson?: Prisma.JsonValue | null;
+  subtitleJson?: Prisma.JsonValue | null;
+  importMode?: ReferenceImportMode | null;
+  consentStatus?: ReferenceConsentStatus;
+  consentConfirmedAt?: Date | null;
+  consentConfirmedBy?: string | null;
   structureJson: Prisma.JsonValue | null;
   errorJson: Prisma.JsonValue | null;
   createdAt: Date;
@@ -36,6 +51,14 @@ export type SerializedReferenceSource = {
   assetId: string | null;
   status: ReferenceSourceStatus;
   durationMs: number | null;
+  title: string | null;
+  thumbnailUrl: string | null;
+  metadataJson: Prisma.JsonValue | null;
+  subtitleJson: Prisma.JsonValue | null;
+  importMode: ReferenceImportMode | null;
+  consentStatus: ReferenceConsentStatus | null;
+  consentConfirmedAt: Date | null;
+  consentConfirmedBy: string | null;
   transcript: string | null;
   structureJson: Prisma.JsonValue | null;
   errorJson: Prisma.JsonValue | null;
@@ -57,6 +80,14 @@ export function serializeReferenceSource(
     assetId: source.assetId,
     status: source.status,
     durationMs: source.durationMs,
+    title: source.title ?? null,
+    thumbnailUrl: source.thumbnailUrl ?? null,
+    metadataJson: source.metadataJson ?? null,
+    subtitleJson: source.subtitleJson ?? null,
+    importMode: source.importMode ?? null,
+    consentStatus: source.consentStatus ?? null,
+    consentConfirmedAt: source.consentConfirmedAt ?? null,
+    consentConfirmedBy: source.consentConfirmedBy ?? null,
     transcript: source.transcriptScript?.content ?? null,
     structureJson: source.structureJson,
     errorJson: source.errorJson,

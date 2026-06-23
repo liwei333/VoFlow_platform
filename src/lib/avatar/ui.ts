@@ -1,4 +1,5 @@
 import { AvatarStatus, LicenseStatus } from "@prisma/client";
+import type { SerializedAvatar } from "@/lib/avatar/serializer";
 import {
   AVATAR_CONSENT_USAGE_SCOPES,
   DEFAULT_AVATAR_CONSENT_TYPE,
@@ -63,4 +64,20 @@ export function getAvatarStatusView(status: AvatarStatus) {
 
 export function getAvatarLicenseStatusView(status: LicenseStatus) {
   return AVATAR_LICENSE_STATUS_VIEWS[status];
+}
+
+export function getAvatarPreviewDisplay(
+  avatar: Pick<SerializedAvatar, "previewUrl" | "sourceAsset">
+) {
+  if (avatar.previewUrl) {
+    return {
+      imageUrl: avatar.previewUrl,
+      label: "数字人预览",
+    };
+  }
+
+  return {
+    imageUrl: avatar.sourceAsset.accessUrl,
+    label: "源照片",
+  };
 }

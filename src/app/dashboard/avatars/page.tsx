@@ -11,6 +11,7 @@ import {
   AVATAR_CONSENT_USAGE_SCOPE_OPTIONS,
   AvatarConsentUsageScope,
   DEFAULT_AVATAR_CONSENT_TEXT,
+  getAvatarPreviewDisplay,
   getAvatarLicenseStatusView,
   getAvatarStatusView,
 } from "@/lib/avatar/ui";
@@ -54,22 +55,6 @@ function formatDateTime(value: string | Date) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-export function getAvatarPreviewDisplay(
-  avatar: Pick<SerializedAvatar, "previewUrl" | "sourceAsset">
-) {
-  if (avatar.previewUrl) {
-    return {
-      imageUrl: avatar.previewUrl,
-      label: "数字人预览",
-    };
-  }
-
-  return {
-    imageUrl: avatar.sourceAsset.accessUrl,
-    label: "源照片",
-  };
 }
 
 export default function AvatarsPage() {

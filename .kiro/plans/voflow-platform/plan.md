@@ -25,6 +25,7 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | 1 | `voflow-workflow-engine` | 异步任务、工作流节点、状态机、重试、产物记录 | `voflow-foundation`, `voflow-assets-compliance` |
 | 1 | `voflow-local-model-monitor` | 本地 LLM/ASR/TTS/数字人/FFmpeg 服务配置、状态和健康检查 | `voflow-foundation` |
 | 2 | `voflow-reference-extract` | 爆款链接导入、平台识别、音视频解析、ASR 转写、钩子/节奏/卖点提取 | `voflow-workflow-engine`, `voflow-local-model-monitor` |
+| 2 | `voflow-reference-url-import` | 基于 yt-dlp 的公开参考链接 metadata、字幕、授权后音频导入 | `voflow-reference-extract`, `voflow-assets-compliance`, `voflow-workflow-engine`, `voflow-local-model-monitor` |
 | 2 | `voflow-script-ai` | 文案输入、ASR 转写、本地大模型文案改写、标题生成、风险检查 | `voflow-workflow-engine`, `voflow-local-model-monitor` |
 | 2 | `voflow-legal-review` | AI 法务审查、违禁敏感词、夸大宣传、替换建议、人工确认 | `voflow-script-ai` |
 | 2 | `voflow-tts` | 预置音色、TTS 任务、音频产物、试听和确认 | `voflow-workflow-engine`, `voflow-assets-compliance` |
@@ -55,7 +56,7 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 
 ### Batch 2：AI 输入与核心素材
 
-交付爆款链接提取、文案、法务审查、语音克隆和自拍数字人能力线。完成后，系统具备“爆款参考 -> 合规文案 -> 音频”和“照片 -> 我的数字人”的可复用资产。
+交付爆款链接提取、公开参考链接真实导入、文案、法务审查、语音克隆和自拍数字人能力线。完成后，系统具备“爆款参考 -> 合规文案 -> 音频”和“照片 -> 我的数字人”的可复用资产。
 
 文案改写和标题生成默认使用本地大模型服务，不依赖线上大模型 API。
 
@@ -80,11 +81,12 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | --- | --- | --- | --- | --- | --- |
 | 1 | 用户登录工作台 | `voflow-foundation` | done | `tests/api.test.ts`, 登录页和工作台基础页 | 需在最终 MVP 环境复验 |
 | 2 | 用户创建一个 9:16 项目 | `voflow-foundation` | done | 项目 API/UI 测试 | 需在最终 MVP 环境复验 |
-| 3 | 用户上传一张本人正脸照片 | `voflow-self-avatar` | blocked | `POST /api/avatars/photo-check`, `tests/avatar-photo-check-api.test.ts`; 五张真实验收素材已就绪；2026-06-22 实测 `localhost:7000` 为 AirTunes 403，`localhost:7010` 无服务 | 需启动真实本地 `/detect-face` 服务并复验 |
-| 4 | 系统完成照片质量检测和肖像授权确认 | `voflow-self-avatar` | blocked | detector 抽象、mock/local provider、`/detect-face` contract、授权 API 测试；`AVATAR_BASE_URL=http://localhost:7010` 时 `local_model_services.avatar` 为 `offline`，五张图均返回 `AVATAR_PHOTO_DETECTOR_UNAVAILABLE` | 需真实本地人脸检测服务在线后复验质量报告 |
+| 3 | 用户上传一张本人正脸照片 | `voflow-self-avatar` | done | `POST /api/avatars/photo-check` 真实 route 验收；`AVATAR_BASE_URL=http://127.0.0.1:7010`，macOS Vision `/detect-face` 在线；正脸图返回 `passed=true` | 需在最终 MVP 环境复验 |
+| 4 | 系统完成照片质量检测和肖像授权确认 | `voflow-self-avatar` | done | 五类真实图片 route 验收通过；多人脸/模糊/姿态/曝光异常均返回明确 reason；正脸图完成 `photo-check -> create avatar with consent -> list avatars` | 需在最终 MVP 环境复验 |
 | 5 | 系统生成“我的数字人”并在列表中可选 | `voflow-self-avatar` | partial | avatar 创建、授权、列表、删除、设为默认、预览口径测试 | 真实生成预览产物待后续 `voflow-video-render` 写入 |
-| 6 | 用户粘贴爆款视频链接或上传参考视频 | `voflow-reference-extract` | done | `voflow-reference-extract` checkpoint 和相关测试 | 需在最终 MVP 环境复验 |
-| 7 | 系统提取原文、钩子、节奏和卖点 | `voflow-reference-extract` | done | 结构分析 Worker 和相关测试 | 需在最终 MVP 环境复验 |
+| 6a | 用户上传参考视频/音频，系统提取原文和结构 | `voflow-reference-extract` | done | `voflow-reference-extract` checkpoint 和相关测试 | 需在最终 MVP 环境复验 |
+| 6b | 用户粘贴公开参考链接，系统解析 metadata/字幕/音频并进入结构分析 | `voflow-reference-url-import` | partial | `POST /api/projects/{projectId}/references/url/parse` metadata-only 链路、`POST /api/projects/{projectId}/references/{referenceSourceId}/import` 授权确认 API、`reference_url_import` queued workflow node、字幕优先导入生成 Script/AsrSegment/structureJson、yt-dlp metadata parser、配置/allowlist/feature flag 和 schema/API/worker 测试 | 授权后音频提取、审计和 UI 确认仍待后续任务 |
+| 7 | 系统提取原文、钩子、节奏和卖点 | `voflow-reference-extract`, `voflow-reference-url-import` | partial | 上传素材路径已完成；公开链接 metadata 解析、授权确认 API、queued workflow node 和字幕结构分析已完成；结构分析 Worker 和相关测试 | 公开链接无字幕时的音频提取路径待 `voflow-reference-url-import` Task 9-14 |
 | 8 | 系统生成改写文案和标题候选 | `voflow-script-ai` | done | 文案改写、标题生成、风险检查测试 | 需在最终 MVP 环境复验 |
 | 9 | 系统执行 AI 法务审查，给出风险原因和替换建议 | `voflow-legal-review` | done | 法务审查 API/service 测试 | 需在最终 MVP 环境复验 |
 | 10 | 用户选择预置音色或克隆音色生成语音 | `voflow-tts`, `voflow-voice-clone` | partial | 预置音色 TTS 已完成 | `voflow-voice-clone` 未开始 |
@@ -92,7 +94,7 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | 12 | 系统合成字幕、BGM、画中画、封面和最终 MP4 | `voflow-advanced-editing`, `voflow-packaging-export` | not_started | - | Spec 未开始 |
 | 13 | 系统生成各平台标题、标签、描述、话题 | `voflow-publish-assistant` | not_started | - | Spec 未开始 |
 | 14 | 用户一键发布到已授权平台，未授权或 token 过期平台给出可处理状态 | `voflow-publish-assistant` | not_started | - | Spec 未开始 |
-| 15 | 任务中心展示每个节点状态、产物和失败重试入口 | `voflow-workflow-engine` | partial | workflow engine 任务中心和状态机测试 | 需与后续 voice_clone/avatar_render/export/publish 节点端到端联调 |
+| 15 | 任务中心展示每个节点状态、产物和失败重试入口 | `voflow-workflow-engine` | partial | workflow engine 任务中心和状态机测试 | 需与后续 reference_url_import/voice_clone/avatar_render/export/publish 节点端到端联调 |
 
 ## 5. 后续增强范围
 
@@ -108,10 +110,10 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 
 当前唯一开发入口：
 
-- Active Spec: `voflow-self-avatar`
-- Active Scope: 自拍数字人返修收口
-- Active Focus: Checkpoint 15 自拍数字人最终环境验收
-- Status: `in_progress`
+- Active Spec: `voflow-reference-url-import`
+- Active Scope: 公开参考链接授权后音频提取
+- Active Focus: Task 9 提取音频、创建 Asset/AssetConsent 并复用 reference_extract
+- Status: `ready_for_next_task`
 
 未完成当前游标前，不允许并行启动以下新 Spec：
 
@@ -139,11 +141,12 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | `voflow-workflow-engine` | partial | 与后续节点做端到端联调 |
 | `voflow-local-model-monitor` | done | 后续真实模型接入时复用 |
 | `voflow-reference-extract` | done | 最终 MVP 环境复验 |
+| `voflow-reference-url-import` | partial | 继续 Task 9：实现授权后音频提取 |
 | `voflow-script-ai` | done | 最终 MVP 环境复验 |
 | `voflow-legal-review` | done | 最终 MVP 环境复验 |
 | `voflow-tts` | done | 与 voice clone 和 avatar render 联调 |
-| `voflow-self-avatar` | blocked | 启动真实 `/detect-face` 服务后使用五张验收素材执行 Checkpoint 15 |
-| `voflow-voice-clone` | not_started | self-avatar 返修完成后启动 |
+| `voflow-self-avatar` | done | 最终 MVP 环境复验 |
+| `voflow-voice-clone` | not_started | 可启动 Spec 拆分和任务执行判断 |
 | `voflow-video-render` | not_started | 依赖 voice clone/self-avatar/workflow |
 | `voflow-advanced-editing` | not_started | 依赖 video render |
 | `voflow-packaging-export` | not_started | 依赖 legal-review/video-render/advanced-editing |

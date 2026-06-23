@@ -61,6 +61,14 @@ describe("Reference source database schema", () => {
         { column_name: "status" },
         { column_name: "durationMs" },
         { column_name: "transcriptScriptId" },
+        { column_name: "title" },
+        { column_name: "thumbnailUrl" },
+        { column_name: "metadataJson" },
+        { column_name: "subtitleJson" },
+        { column_name: "importMode" },
+        { column_name: "consentStatus" },
+        { column_name: "consentConfirmedAt" },
+        { column_name: "consentConfirmedBy" },
         { column_name: "structureJson" },
         { column_name: "errorJson" },
         { column_name: "createdAt" },
@@ -76,13 +84,31 @@ describe("Reference source database schema", () => {
       { enumlabel: "pasted_text" },
     ]);
 
-    await expect(getEnumValues("ReferenceSourceStatus")).resolves.toEqual([
+    await expect(getEnumValues("ReferenceSourceStatus")).resolves.toEqual(
+      expect.arrayContaining([
+        { enumlabel: "pending" },
+        { enumlabel: "parsing" },
+        { enumlabel: "metadata_ready" },
+        { enumlabel: "transcribing" },
+        { enumlabel: "analyzing" },
+        { enumlabel: "succeeded" },
+        { enumlabel: "failed" },
+      ])
+    );
+  });
+
+  it("adds import mode and consent status enums for public URL import", async () => {
+    await expect(getEnumValues("ReferenceImportMode")).resolves.toEqual([
+      { enumlabel: "metadata_only" },
+      { enumlabel: "subtitle_only" },
+      { enumlabel: "audio_extract" },
+      { enumlabel: "uploaded_asset" },
+    ]);
+
+    await expect(getEnumValues("ReferenceConsentStatus")).resolves.toEqual([
       { enumlabel: "pending" },
-      { enumlabel: "parsing" },
-      { enumlabel: "transcribing" },
-      { enumlabel: "analyzing" },
-      { enumlabel: "succeeded" },
-      { enumlabel: "failed" },
+      { enumlabel: "confirmed" },
+      { enumlabel: "rejected" },
     ]);
   });
 

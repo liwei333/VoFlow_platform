@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
+import { createServer, type Server } from "node:http";
 import { LocalModelServiceType } from "@prisma/client";
 import { createSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -136,6 +137,43 @@ describe("local model service APIs", () => {
     expect(saved?.checkedAt).toBeInstanceOf(Date);
   });
 
+  it("clears stale lastError when a health check returns online", async () => {
+    const server = await startJsonServer("/v1/models", { data: [{ id: "qwen" }] });
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Expected test server to listen on a TCP port");
+    }
+
+    await prisma.localModelService.update({
+      where: { serviceType: "llm" },
+      data: {
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        status: "offline",
+        lastError: { errorCode: "LOCAL_SERVICE_OFFLINE", errorMessage: "旧错误" },
+      },
+    });
+
+    try {
+      const response = await checkOneService(await createRequest("/api/local-model-services/llm/health", "POST"), {
+        params: Promise.resolve({ serviceType: "llm" }),
+      });
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.data.service).toMatchObject({
+        serviceType: "llm",
+        status: "online",
+        lastError: null,
+      });
+
+      const saved = await prisma.localModelService.findUnique({ where: { serviceType: "llm" } });
+      expect(saved?.status).toBe("online");
+      expect(saved?.lastError).toBeNull();
+    } finally {
+      await closeServer(server);
+    }
+  });
+
   it("returns validation error for unknown service type", async () => {
     const response = await checkOneService(await createRequest("/api/local-model-services/unknown/health", "POST"), {
       params: Promise.resolve({ serviceType: "unknown" }),
@@ -177,6 +215,35 @@ describe("local model service APIs", () => {
       headers: {
         cookie: `session=${token}`,
       },
+    });
+  }
+
+  function startJsonServer(path: string, payload: unknown): Promise<Server> {
+    const server = createServer((request, response) => {
+      if (request.url !== path) {
+        response.writeHead(404);
+        response.end();
+        return;
+      }
+
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify(payload));
+    });
+
+    return new Promise((resolve) => {
+      server.listen(0, "127.0.0.1", () => resolve(server));
+    });
+  }
+
+  function closeServer(server: Server): Promise<void> {
+    return new Promise((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
     });
   }
 });
