@@ -81,7 +81,7 @@
   - 明确文案：参考分析，不是下载器，不提供完整视频下载或去水印
   - _Requirements: US-1.1, US-2.1, US-3.1, US-4.1, US-4.5_
 
-- [ ] 12. 添加测试
+- [x] 12. 添加测试
   - 单元测试：metadata normalize、字幕选择、字幕解析、duration/size limit、unsupported fallback、command args 安全
   - Service 测试：metadata parse、confirm import、subtitle creates Script/AsrSegment、audio creates Asset/Consent/WorkflowNode、failed import writes AuditLog
   - Worker 测试：mock `YtDlpClient` 覆盖 metadata_only、subtitle_only、audio_extract
@@ -445,3 +445,61 @@
 - 是否满足对应 Acceptance Criteria：满足 metadata 展示、字幕可用性展示、推荐 importMode、失败 fallback、reference-analysis-only 授权确认和 MVP 合规边界文案。
 - 是否允许勾选：允许勾选 Task 11，不允许勾选 Task 12-14 或 Checkpoint 14。
 - 下一步：Task 12，按任务清单补齐/复核单元、service、worker、API 测试覆盖，并把已有 Task 0-11 测试映射到清单缺口。
+
+### Task 12: 添加/复核测试覆盖
+
+### 任务
+- Spec: `voflow-reference-url-import`
+- Task: 12
+- Requirements: US-1、US-2、US-3、US-4、NFR-4
+
+### 修改文件
+- `tests/reference-url-import-parser.test.ts`
+- `tests/reference-url-import-worker.test.ts`
+- `.kiro/specs/voflow-reference-url-import/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：复核 Task 12 清单中 unit/service/worker/API 覆盖点，并补齐音频提取参数安全、metadata 输出大小限制、worker 时长限制、worker 音频大小限制四个缺口。
+- 未改生产代码；本轮新增的是回归测试和覆盖映射记录。
+
+### 覆盖映射
+| 覆盖点 | 测试文件 | 当前状态 |
+| --- | --- | --- |
+| metadata normalize | `tests/reference-url-import-parser.test.ts` | 覆盖 title、durationMs、thumbnail、extractor、subtitle/automaticCaptions、bounded rawSummary |
+| 字幕选择 | `tests/reference-url-import-subtitle.test.ts` | 覆盖人工中文字幕优先、无人工字幕时自动字幕 fallback |
+| 字幕解析 | `tests/reference-url-import-subtitle.test.ts` | 覆盖 VTT/SRT 清洗文本和有序 ASR segments |
+| duration limit | `tests/reference-url-import-worker.test.ts` | 新增覆盖 `REFERENCE_DURATION_LIMIT_EXCEEDED`，并断言不调用 yt-dlp/上传/reference_extract |
+| size limit | `tests/reference-url-import-parser.test.ts`、`tests/reference-url-import-worker.test.ts` | 新增覆盖 metadata stdout 超限与提取后音频超限 |
+| unsupported fallback | `tests/reference-api.test.ts`、`tests/reference-ui.test.ts` | 覆盖 feature disabled、platform not allowlisted、display fallback copy |
+| command args 安全 | `tests/reference-url-import-parser.test.ts` | 覆盖 metadata 与 audio extract 均通过 spawn args、`shell:false`，并包含 `--no-playlist`/`--max-filesize` |
+| metadata parse service/API | `tests/reference-api.test.ts` | 覆盖 parse endpoint 创建/更新 `metadata_ready` ReferenceSource、team isolation 和 feature flag |
+| confirm import service/API | `tests/reference-api.test.ts` | 覆盖 `metadata_only`、`subtitle_only` consent required、字幕确认后入队、音频开关禁用、跨 team 拒绝 |
+| subtitle creates Script/AsrSegment | `tests/reference-url-import-worker.test.ts` | 覆盖 `Script(sourceType=asr)`、`AsrSegment`、`structureJson` 和成功审计 |
+| audio creates Asset/Consent/WorkflowNode | `tests/reference-url-import-worker.test.ts`、`tests/workflow-worker-artifact-service.test.ts`、`tests/reference-asset-extraction-service.test.ts` | 覆盖 audio Asset、AssetConsent(`reference_analysis_only`)、reference_extract 衔接和 handler 注册 |
+| failed import writes AuditLog | `tests/reference-url-import-worker.test.ts` | 覆盖失败写 `AuditLog(action=reference_url_import)` 和 failureReason |
+| API team isolation | `tests/reference-api.test.ts` | 覆盖跨 team import/retry/list/get 隔离 |
+| consent required | `tests/reference-api.test.ts` | 覆盖字幕/音频确认前必须 reference-analysis-only 授权 |
+
+### 硬编码检查
+- 是否新增运行时硬编码：否，本轮只新增测试断言和执行反馈。
+- 是否依赖真实外网或真实 yt-dlp：否，`YtDlpClient` 测试使用 fake spawn，worker 测试使用 fake extractor/storage/referenceExtractTask。
+- 是否新增 mock/provider 占位到运行时代码：否。
+
+### 公共化检查
+- 复用的公共模块：现有 `YtDlpClient`、`createReferenceUrlImportWorkflowNodeHandler`、API route 测试 helper 和 Prisma 测试清理逻辑。
+- 新增公共函数：无。
+- 覆盖缺口处理：Task 12 清单项均已映射到测试文件；新增缺口测试集中在 parser/client 与 worker 两个现有测试文件，未创建重复测试工具。
+
+### 验证命令
+- 补充测试: `npm run test:run -- tests/reference-url-import-parser.test.ts tests/reference-url-import-worker.test.ts`: 通过，2 files / 11 tests。
+- 回归: `npm run test:run -- tests/reference-url-import-config.test.ts tests/reference-url-import-parser.test.ts tests/reference-url-import-subtitle.test.ts tests/reference-url-import-worker.test.ts tests/reference-api.test.ts tests/reference-source-schema.test.ts tests/reference-asset-extraction-service.test.ts tests/asset-consent.test.ts tests/workflow-worker-artifact-service.test.ts tests/reference-ui.test.ts tests/reference-components.test.tsx`: 通过。
+- `npm run lint`: 通过。
+- `npm run build`: 通过。
+- `git diff --check`: 通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 12。
+- 是否满足对应 Acceptance Criteria：满足 unit、service、worker、API 覆盖复核；新增测试覆盖 duration/size limit 和 command args 安全缺口。
+- 是否允许勾选：允许勾选 Task 12，不允许勾选 Task 13-14 或 Checkpoint 14。
+- 下一步：Task 13，更新本地运行文档，说明 yt-dlp/ffmpeg 可选安装、配置项默认禁用策略、国内平台 fallback 口径。

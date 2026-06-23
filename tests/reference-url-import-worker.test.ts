@@ -496,6 +496,130 @@ describe("reference_url_import worker", () => {
     });
   });
 
+  it("rejects audio extraction before yt-dlp when the reference duration exceeds the limit", async () => {
+    await prisma.referenceSource.update({
+      where: { id: referenceSourceId },
+      data: {
+        importMode: "audio_extract",
+        durationMs: 181_000,
+      },
+    });
+    const audioExtractor = {
+      extractAudio: vi.fn(),
+    };
+    const assetStorage = {
+      uploadAsset: vi.fn(),
+    };
+    const referenceExtractTask = vi.fn();
+    const handler = createReferenceUrlImportWorkflowNodeHandler({
+      audioExtractor,
+      assetStorage,
+      referenceExtractTask,
+      config: {
+        enabled: true,
+        ytdlpBin: "yt-dlp",
+        timeoutMs: 60_000,
+        maxDurationMs: 180_000,
+        maxAudioBytes: 50 * 1024 * 1024,
+        maxMetadataBytes: 2 * 1024 * 1024,
+        maxSubtitleBytes: 5 * 1024 * 1024,
+        allowAudioExtract: true,
+        allowFullVideoDownload: false,
+        allowedPlatforms: ["youtube"],
+      },
+    });
+
+    await expect(
+      handler({
+        payload: createPayload(),
+        input: {
+          ...createNodeInput(),
+          importMode: "audio_extract",
+        },
+      })
+    ).rejects.toMatchObject({
+      code: "REFERENCE_DURATION_LIMIT_EXCEEDED",
+    });
+    expect(audioExtractor.extractAudio).not.toHaveBeenCalled();
+    expect(assetStorage.uploadAsset).not.toHaveBeenCalled();
+    expect(referenceExtractTask).not.toHaveBeenCalled();
+
+    const referenceSource = await prisma.referenceSource.findUnique({
+      where: { id: referenceSourceId },
+    });
+    expect(referenceSource?.errorJson).toMatchObject({
+      code: "REFERENCE_DURATION_LIMIT_EXCEEDED",
+    });
+  });
+
+  it("rejects extracted audio that exceeds the configured size before upload", async () => {
+    await prisma.referenceSource.update({
+      where: { id: referenceSourceId },
+      data: {
+        importMode: "audio_extract",
+        durationMs: 46_000,
+        subtitleJson: null,
+      },
+    });
+    const audioExtractor = {
+      extractAudio: vi.fn().mockResolvedValue({
+        content: Buffer.from("too large audio"),
+        fileName: "reference-audio.m4a",
+        mimeType: "audio/mp4",
+        sizeBytes: 2048,
+      }),
+    };
+    const assetStorage = {
+      uploadAsset: vi.fn(),
+    };
+    const referenceExtractTask = vi.fn();
+    const handler = createReferenceUrlImportWorkflowNodeHandler({
+      audioExtractor,
+      assetStorage,
+      referenceExtractTask,
+      config: {
+        enabled: true,
+        ytdlpBin: "yt-dlp",
+        timeoutMs: 60_000,
+        maxDurationMs: 180_000,
+        maxAudioBytes: 1024,
+        maxMetadataBytes: 2 * 1024 * 1024,
+        maxSubtitleBytes: 5 * 1024 * 1024,
+        allowAudioExtract: true,
+        allowFullVideoDownload: false,
+        allowedPlatforms: ["youtube"],
+      },
+    });
+
+    await expect(
+      handler({
+        payload: createPayload(),
+        input: {
+          ...createNodeInput(),
+          importMode: "audio_extract",
+        },
+      })
+    ).rejects.toMatchObject({
+      code: "REFERENCE_AUDIO_SIZE_LIMIT_EXCEEDED",
+    });
+    expect(audioExtractor.extractAudio).toHaveBeenCalledWith(
+      "https://www.youtube.com/watch?v=demo",
+      expect.objectContaining({
+        maxAudioBytes: 1024,
+        traceId: "trace-reference-url-worker",
+      })
+    );
+    expect(assetStorage.uploadAsset).not.toHaveBeenCalled();
+    expect(referenceExtractTask).not.toHaveBeenCalled();
+
+    const referenceSource = await prisma.referenceSource.findUnique({
+      where: { id: referenceSourceId },
+    });
+    expect(referenceSource?.errorJson).toMatchObject({
+      code: "REFERENCE_AUDIO_SIZE_LIMIT_EXCEEDED",
+    });
+  });
+
   function createPayload(): WorkflowQueuePayload {
     return {
       jobId,

@@ -92,6 +92,52 @@ describe("reference URL import parser", () => {
     );
   });
 
+  it("rejects yt-dlp metadata output that exceeds the configured size limit", async () => {
+    const spawn = vi.fn(() => createProcess("x".repeat(32)));
+    const client = new YtDlpClient({
+      ytdlpBin: "yt-dlp",
+      timeoutMs: 5_000,
+      maxMetadataBytes: 8,
+      spawn,
+    });
+
+    await expect(client.getMetadata("https://www.youtube.com/watch?v=demo")).rejects.toMatchObject({
+      code: "REFERENCE_METADATA_INVALID",
+      detail: "yt-dlp metadata exceeded configured size limit",
+    });
+  });
+
+  it("extracts audio through bounded yt-dlp args without shell command strings", async () => {
+    const spawn = vi.fn(() => createProcess(""));
+    const client = new YtDlpClient({
+      ytdlpBin: "/opt/bin/yt-dlp",
+      timeoutMs: 5_000,
+      maxMetadataBytes: 4096,
+      spawn,
+    });
+
+    await expect(
+      client.extractAudio("https://www.youtube.com/watch?v=demo", {
+        maxAudioBytes: 1024,
+      })
+    ).rejects.toMatchObject({
+      code: "REFERENCE_AUDIO_EXTRACT_FAILED",
+    });
+    expect(spawn).toHaveBeenCalledWith(
+      "/opt/bin/yt-dlp",
+      expect.arrayContaining([
+        "--no-playlist",
+        "--extract-audio",
+        "--audio-format",
+        "m4a",
+        "--max-filesize",
+        "1024",
+        "https://www.youtube.com/watch?v=demo",
+      ]),
+      expect.objectContaining({ shell: false })
+    );
+  });
+
   it("uses a parser input to call the client and normalize metadata", async () => {
     const input: ReferenceLinkParserInput = {
       sourceUrl: "https://www.youtube.com/watch?v=demo",
