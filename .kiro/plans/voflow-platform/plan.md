@@ -85,11 +85,11 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | 4 | 系统完成照片质量检测和肖像授权确认 | `voflow-self-avatar` | done | 五类真实图片 route 验收通过；多人脸/模糊/姿态/曝光异常均返回明确 reason；正脸图完成 `photo-check -> create avatar with consent -> list avatars` | 需在最终 MVP 环境复验 |
 | 5 | 系统生成“我的数字人”并在列表中可选 | `voflow-self-avatar` | partial | avatar 创建、授权、列表、删除、设为默认、预览口径测试 | 真实生成预览产物待后续 `voflow-video-render` 写入 |
 | 6a | 用户上传参考视频/音频，系统提取原文和结构 | `voflow-reference-extract` | done | `voflow-reference-extract` checkpoint 和相关测试 | 需在最终 MVP 环境复验 |
-| 6b | 用户粘贴公开参考链接，系统解析 metadata/字幕/音频并进入结构分析 | `voflow-reference-url-import` | partial | `POST /api/projects/{projectId}/references/url/parse` metadata-only 链路、`POST /api/projects/{projectId}/references/{referenceSourceId}/import` 授权确认 API、`reference_url_import` queued workflow node、字幕优先导入生成 Script/AsrSegment/structureJson、授权后音频提取创建 Asset/AssetConsent 并复用 reference_extract、导入成功/失败审计、禁止完整视频/cookie/去水印/批量采集、reference-only 素材用途阻断、爆款提取 UI 展示 metadata/字幕可用性/推荐 importMode/fallback/reference-analysis-only 授权确认、配置/allowlist/feature flag 和 schema/API/worker/UI 测试、Task 12 已补齐 duration/size limit 和 command args 安全覆盖映射 | 文档和 Checkpoint 验收仍待后续任务 |
-| 7 | 系统提取原文、钩子、节奏和卖点 | `voflow-reference-extract`, `voflow-reference-url-import` | partial | 上传素材路径已完成；公开链接 metadata 解析、授权确认 API、queued workflow node、字幕结构分析、无字幕音频 reference_extract 衔接、导入审计/阻断、UI 状态确认和测试清单复核已完成；结构分析 Worker 和相关测试 | 文档和最终验收待 `voflow-reference-url-import` Task 13-14 |
+| 6b | 用户粘贴公开参考链接，系统解析 metadata/字幕/音频并进入结构分析 | `voflow-reference-url-import` | done | `POST /api/projects/{projectId}/references/url/parse` metadata-only 链路、`POST /api/projects/{projectId}/references/{referenceSourceId}/import` 授权确认 API、`reference_url_import` queued workflow node、字幕优先导入生成 Script/AsrSegment/structureJson、授权后音频提取创建 Asset/AssetConsent 并复用 reference_extract、导入成功/失败审计、禁止完整视频/cookie/去水印/批量采集、reference-only 素材用途阻断、爆款提取 UI 展示 metadata/字幕可用性/推荐 importMode/fallback/reference-analysis-only 授权确认、配置/allowlist/feature flag 和 schema/API/worker/UI 测试、Task 12 已补齐 duration/size limit 和 command args 安全覆盖映射、本地运行文档已说明 yt-dlp/ffmpeg/默认禁用/国内平台 fallback、Task 14 checkpoint 已逐条通过 metadata/字幕/音频/fallback/审计日志/focused tests/lint/build 验收 | 需在最终 MVP 环境复验 |
+| 7 | 系统提取原文、钩子、节奏和卖点 | `voflow-reference-extract`, `voflow-reference-url-import` | done | 上传素材路径已完成；公开链接 metadata 解析、授权确认 API、queued workflow node、字幕结构分析、无字幕音频 reference_extract 衔接、导入审计/阻断、UI 状态确认、测试清单复核、本地运行文档和 Task 14 checkpoint 已完成；结构分析 Worker 和相关测试 | 需在最终 MVP 环境复验 |
 | 8 | 系统生成改写文案和标题候选 | `voflow-script-ai` | done | 文案改写、标题生成、风险检查测试 | 需在最终 MVP 环境复验 |
 | 9 | 系统执行 AI 法务审查，给出风险原因和替换建议 | `voflow-legal-review` | done | 法务审查 API/service 测试 | 需在最终 MVP 环境复验 |
-| 10 | 用户选择预置音色或克隆音色生成语音 | `voflow-tts`, `voflow-voice-clone` | partial | 预置音色 TTS 已完成 | `voflow-voice-clone` 未开始 |
+| 10 | 用户选择预置音色或克隆音色生成语音 | `voflow-tts`, `voflow-voice-clone` | partial | 预置音色 TTS 已完成；`voflow-voice-clone` Task 0 开发规范检查和任务执行判断已完成 | `voflow-voice-clone` Task 1-11 待实现 |
 | 11 | 系统使用我的数字人生成口播视频 | `voflow-video-render` | not_started | - | Spec 未开始 |
 | 12 | 系统合成字幕、BGM、画中画、封面和最终 MP4 | `voflow-advanced-editing`, `voflow-packaging-export` | not_started | - | Spec 未开始 |
 | 13 | 系统生成各平台标题、标签、描述、话题 | `voflow-publish-assistant` | not_started | - | Spec 未开始 |
@@ -110,9 +110,9 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 
 当前唯一开发入口：
 
-- Active Spec: `voflow-reference-url-import`
-- Active Scope: 公开参考链接本地运行文档
-- Active Focus: Task 13 更新本地运行文档，说明 yt-dlp/ffmpeg 可选安装、配置项和默认禁用策略、国内平台 fallback 口径
+- Active Spec: `voflow-voice-clone`
+- Active Scope: 声音克隆开发规范检查与任务启动
+- Active Focus: Task 1 创建声音克隆数据表：`voice_samples`、`voice_consents`、`voice_clone_jobs`
 - Status: `ready_for_next_task`
 
 未完成当前游标前，不允许并行启动以下新 Spec：
@@ -141,12 +141,12 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | `voflow-workflow-engine` | partial | 与后续节点做端到端联调 |
 | `voflow-local-model-monitor` | done | 后续真实模型接入时复用 |
 | `voflow-reference-extract` | done | 最终 MVP 环境复验 |
-| `voflow-reference-url-import` | partial | 继续 Task 13：更新本地运行文档 |
+| `voflow-reference-url-import` | done | 最终 MVP 环境复验 |
 | `voflow-script-ai` | done | 最终 MVP 环境复验 |
 | `voflow-legal-review` | done | 最终 MVP 环境复验 |
 | `voflow-tts` | done | 与 voice clone 和 avatar render 联调 |
 | `voflow-self-avatar` | done | 最终 MVP 环境复验 |
-| `voflow-voice-clone` | not_started | 可启动 Spec 拆分和任务执行判断 |
+| `voflow-voice-clone` | partial | 继续 Task 1：创建声音克隆数据表 |
 | `voflow-video-render` | not_started | 依赖 voice clone/self-avatar/workflow |
 | `voflow-advanced-editing` | not_started | 依赖 video render |
 | `voflow-packaging-export` | not_started | 依赖 legal-review/video-render/advanced-editing |

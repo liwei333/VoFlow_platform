@@ -88,13 +88,13 @@
   - API 测试：team isolation、feature disabled、consent required、unsupported platform
   - _Requirements: US-1, US-2, US-3, US-4, NFR-4_
 
-- [ ] 13. 更新本地运行文档
+- [x] 13. 更新本地运行文档
   - 在 `docs/04-本地运行项目教程.md` 写明本地安装 `yt-dlp` 和 `ffmpeg` 的可选步骤
   - 说明 Docker/Homebrew 模式下的配置项和默认禁用策略
   - 说明国内平台仅平台识别和 fallback，不承诺自动提取
   - _Requirements: US-1.3, US-1.5, US-4.5, NFR-3_
 
-- [ ] 14. Checkpoint: 参考链接真实导入验收
+- [x] 14. Checkpoint: 参考链接真实导入验收
   - 用户粘贴白名单公开链接后可看到 metadata
   - 有字幕链接可生成 `Script`、`AsrSegment` 和 structureJson
   - 无字幕链接在授权后可提取音频并复用 `reference_extract`
@@ -503,3 +503,93 @@
 - 是否满足对应 Acceptance Criteria：满足 unit、service、worker、API 覆盖复核；新增测试覆盖 duration/size limit 和 command args 安全缺口。
 - 是否允许勾选：允许勾选 Task 12，不允许勾选 Task 13-14 或 Checkpoint 14。
 - 下一步：Task 13，更新本地运行文档，说明 yt-dlp/ffmpeg 可选安装、配置项默认禁用策略、国内平台 fallback 口径。
+
+### Task 13: 更新本地运行文档
+
+### 任务
+- Spec: `voflow-reference-url-import`
+- Task: 13
+- Requirements: US-1.3、US-1.5、US-4.5、NFR-3
+
+### 修改文件
+- `docs/04-本地运行项目教程.md`
+- `.kiro/specs/voflow-reference-url-import/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：在本地运行文档中补充 `yt-dlp` 和 `ffmpeg` 可选安装/检查步骤。
+- 明确 Docker Compose 只启动 PostgreSQL、Redis 和 MinIO，不会自动安装 `yt-dlp`/`ffmpeg`；宿主机运行 `npm run dev` 时需要宿主机可执行文件。
+- 补充公开参考链接导入配置项、默认禁用策略、allowlist 默认值、完整视频下载默认禁用策略。
+- 补充真实导入验证流程：metadata 解析、字幕优先、授权后音频、fallback。
+- 补充 FAQ：`yt-dlp` 不可用、音频提取失败、国内平台 fallback。
+
+### 硬编码检查
+- 是否新增运行时硬编码：否，本轮只改文档和 Kiro 状态。
+- 配置项是否与代码一致：文档使用 `.env.example` 与 `buildReferenceLinkImportConfig()` 中已有配置项：`VOFLOW_REFERENCE_LINK_IMPORT_ENABLED`、`VOFLOW_YTDLP_BIN`、`VOFLOW_YTDLP_TIMEOUT_MS`、`VOFLOW_REFERENCE_MAX_DURATION_MS`、`VOFLOW_REFERENCE_MAX_AUDIO_MB`、`VOFLOW_REFERENCE_MAX_METADATA_BYTES`、`VOFLOW_REFERENCE_MAX_SUBTITLE_BYTES`、`VOFLOW_REFERENCE_ALLOW_AUDIO_EXTRACT`、`VOFLOW_REFERENCE_ALLOW_FULL_VIDEO_DOWNLOAD`、`VOFLOW_REFERENCE_ALLOWED_PLATFORMS`。
+- 合规边界是否明确：文档明确 MVP 不提供完整视频下载、cookie/登录态导入、去水印或批量采集。
+
+### 公共化检查
+- 复用的公共来源：`src/lib/references/url-import/config.ts`、`.env.example`、`src/lib/references/platforms.ts` 和现有本地运行文档结构。
+- 新增公共函数/service：无。
+- 未新增运行时代码。
+
+### 验证命令
+- `rg -n "VOFLOW_REFERENCE|yt-dlp|ffmpeg|国内平台|完整视频|cookie|去水印|批量采集" docs/04-本地运行项目教程.md .env.example`: 通过，确认文档包含配置、安装、默认禁用和 fallback 口径。
+- `npm run test:run -- tests/reference-url-import-config.test.ts tests/reference-url-import-parser.test.ts tests/reference-url-import-worker.test.ts tests/reference-api.test.ts`: 通过。
+- `npm run lint`: 通过。
+- `npm run build`: 通过。
+- `git diff --check`: 通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 13。
+- 是否满足对应 Acceptance Criteria：满足本地安装说明、Docker/Homebrew 配置说明、默认禁用策略、国内平台 fallback 和合规边界说明。
+- 是否允许勾选：允许勾选 Task 13，不允许勾选 Task 14 或 Checkpoint 14。
+- 下一步：Task 14，执行参考链接真实导入 Checkpoint 验收，逐条对照 metadata、字幕、音频、失败 fallback 和审计日志。
+
+### Task 14: Checkpoint 参考链接真实导入验收
+
+### 任务
+- Spec: `voflow-reference-url-import`
+- Task: 14
+- Requirements: US-1、US-2、US-3、US-4、NFR-1、NFR-2、NFR-3、NFR-4
+
+### 修改文件
+- `.kiro/specs/voflow-reference-url-import/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 验收核对
+| Checkpoint | 证据 | 结论 |
+| --- | --- | --- |
+| 用户粘贴白名单公开链接后可看到 metadata | `tests/reference-api.test.ts` 覆盖 parse API 创建/更新 `ReferenceSource(status=metadata_ready)`，写入 title、durationMs、thumbnailUrl、metadataJson；`tests/reference-components.test.tsx` 和 `tests/reference-ui.test.ts` 覆盖页面 metadata、平台、时长、封面和 fallback 展示 | 通过 |
+| 有字幕链接可生成 Script、AsrSegment 和 structureJson | `tests/reference-url-import-worker.test.ts` 覆盖 `subtitle_only` 选择优先字幕、下载字幕、创建 `Script(sourceType=asr)`、写入 `AsrSegment`、生成 `structureJson` 和成功审计 | 通过 |
+| 无字幕链接在授权后可提取音频并复用 reference_extract | `tests/reference-url-import-worker.test.ts` 覆盖 `audio_extract` 创建 `Asset(type=audio)`、`AssetConsent(usageScope=reference_analysis_only)` 并创建 `reference_extract` workflow；`tests/reference-asset-extraction-service.test.ts` 覆盖 `reference_analysis_only` 可被参考分析链路使用 | 通过 |
+| 未授权、超时、超长、平台不支持、完整视频下载请求均返回明确 fallback | `tests/reference-api.test.ts` 覆盖 consent required、unsupported platform、完整视频/cookie/去水印/批量采集阻断；`tests/reference-url-import-worker.test.ts` 覆盖 duration limit、audio size limit 和失败审计；`tests/reference-url-import-parser.test.ts` 覆盖 metadata stdout size limit 和 command args 安全 | 通过 |
+| 审计日志包含 sourceUrl、platform、importMode、consentTextVersion、ytDlpVersion 和失败原因 | `tests/reference-api.test.ts` 覆盖 confirm import 写入 consentTextVersion；`tests/reference-url-import-worker.test.ts` 覆盖成功/失败 `AuditLog(action=reference_url_import)` 的 metadata 字段 | 通过 |
+| 验收命令包含 focused tests、lint 和必要 build | 本 checkpoint 执行 focused test suite、`npm run lint`、`npm run build`、`git diff --check` | 通过 |
+
+### 范围说明
+- 本次完成：逐条核对公开参考链接 metadata、字幕优先导入、授权后音频提取、失败 fallback 和审计日志覆盖。
+- 自动化验收使用 fake `YtDlpClient`/fake extractor/fake storage 覆盖真实落库、入队和产物创建链路，不访问外网、不调用真实 yt-dlp、不上传真实 MinIO，符合 NFR-4。
+- 真实公网链接的人工验证入口和环境开关已在 Task 13 文档中说明；默认配置仍保持 `VOFLOW_REFERENCE_LINK_IMPORT_ENABLED=false` 和完整视频下载禁用。
+
+### 硬编码检查
+- 是否新增运行时硬编码：否，本轮仅更新 Kiro 状态文档。
+- 配置、错误码、平台白名单、限制和 fallback 文案仍由 `src/lib/references/url-import/config.ts`、`.env.example` 和 `src/lib/references/ui.ts` 收口。
+- 未新增完整视频下载、cookie/登录态导入、去水印或批量采集入口。
+
+### 公共化检查
+- 复用的公共模块：`ReferenceLinkParser`、`YtDlpClient`、`selectPreferredSubtitleTrack`、字幕解析、`createReferenceUrlImportWorkflowNodeHandler`、`createReferenceExtractTask`、`assertAssetUsable`、`writeAuditLog`、URL import UI state helper。
+- 新增公共函数/service：无。
+- 本轮未改生产代码，无需新增抽象。
+
+### 验证命令
+- Focused: `npm run test:run -- tests/reference-url-import-config.test.ts tests/reference-url-import-parser.test.ts tests/reference-url-import-subtitle.test.ts tests/reference-url-import-worker.test.ts tests/reference-api.test.ts tests/reference-source-schema.test.ts tests/reference-asset-extraction-service.test.ts tests/reference-asr-service.test.ts tests/asset-consent.test.ts tests/audit-log.test.ts tests/asset-ui.test.ts tests/workflow-worker-artifact-service.test.ts tests/reference-ui.test.ts tests/reference-components.test.tsx`: 通过。
+- `npm run lint`: 通过。
+- `npm run build`: 通过。
+- `git diff --check`: 通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 14。
+- 是否满足对应 Acceptance Criteria：满足 metadata 展示、字幕生成 Script/AsrSegment/structureJson、授权音频提取并复用 reference_extract、失败 fallback、审计日志字段和 focused tests/lint/build 验收。
+- 是否允许勾选：允许勾选 Task 14；`voflow-reference-url-import` 当前 Spec 已完成 checkpoint，后续只保留最终 MVP 环境复验。
+- 下一步：按总控 plan 启动下一个 Spec，建议进入 `voflow-voice-clone` 的拆分/任务执行判断；如要先做环境级验收，可按 Task 13 文档开启真实链接导入开关后进行人工公网链接复验。
