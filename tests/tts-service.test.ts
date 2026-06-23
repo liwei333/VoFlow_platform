@@ -277,4 +277,97 @@ describe("TTS services", () => {
       },
     ]);
   });
+
+  it("rejects new TTS tasks when a cloned voice has been disabled", async () => {
+    const clonedVoice = await prisma.voice.create({
+      data: {
+        teamId,
+        ownerId: userId,
+        voiceType: "cloned",
+        name: "已停用克隆音色",
+        provider: "mock",
+        modelId: "disabled-cloned-voice",
+        status: "disabled",
+        licenseStatus: "approved",
+        sampleUrl: "mock://disabled-cloned-voice.wav",
+      },
+    });
+
+    const result = await createTtsWorkflowTask({
+      jobId,
+      teamId,
+      userId,
+      scriptCandidateId: candidateId,
+      voiceId: clonedVoice.id,
+      params: {
+        speed: 1,
+        pitch: 0,
+      },
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "VOICE_NOT_FOUND",
+        message: "音色不存在",
+      },
+    });
+
+    await prisma.voice.deleteMany({ where: { id: clonedVoice.id } });
+  });
+
+  it("keeps historical TTS request voice references after a cloned voice is disabled", async () => {
+    const clonedVoice = await prisma.voice.create({
+      data: {
+        teamId,
+        ownerId: userId,
+        voiceType: "cloned",
+        name: "历史克隆音色",
+        provider: "mock",
+        modelId: "history-cloned-voice",
+        status: "active",
+        licenseStatus: "approved",
+        sampleUrl: "mock://history-cloned-voice.wav",
+      },
+    });
+
+    const created = await createTtsWorkflowTask(
+      {
+        jobId,
+        teamId,
+        userId,
+        scriptCandidateId: candidateId,
+        voiceId: clonedVoice.id,
+        params: {
+          speed: 1,
+          pitch: 0,
+        },
+      },
+      {
+        queue: {
+          enqueue: async () => undefined,
+        },
+        createTraceId: () => "trace-disabled-history",
+      }
+    );
+    expect(created.success).toBe(true);
+
+    await prisma.voice.update({
+      where: { id: clonedVoice.id },
+      data: { status: "disabled" },
+    });
+
+    await expect(
+      prisma.ttsRequest.findUnique({
+        where: { id: created.success ? created.data.ttsRequest.id : "" },
+        include: { voice: true },
+      })
+    ).resolves.toMatchObject({
+      voiceId: clonedVoice.id,
+      voice: {
+        id: clonedVoice.id,
+        status: "disabled",
+      },
+    });
+  });
 });

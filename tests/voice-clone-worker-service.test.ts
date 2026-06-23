@@ -128,6 +128,7 @@ describe("voice clone workflow worker", () => {
 
   afterEach(async () => {
     await prisma.voiceCloneJob.deleteMany({ where: { voiceSampleId } });
+    await prisma.voice.deleteMany({ where: { teamId } });
     await prisma.workflowNode.deleteMany({ where: { jobId } });
     await prisma.voiceConsent.deleteMany({ where: { teamId } });
     await prisma.voiceSample.deleteMany({ where: { teamId } });
@@ -138,7 +139,7 @@ describe("voice clone workflow worker", () => {
     await prisma.user.deleteMany({ where: { id: userId } });
   });
 
-  it("runs the trainer, updates voice_clone_jobs, and returns model metadata", async () => {
+  it("runs the trainer, creates a cloned voice, links it to the job, and returns model metadata", async () => {
     const storage = {
       downloadObject: vi.fn(async () => Buffer.from("voice audio")),
     };
@@ -175,12 +176,13 @@ describe("voice clone workflow worker", () => {
       `voflow/${teamId}/assets/voice-clone-worker-sample/raw/voice.wav`
     );
     expect(trainerFactory).toHaveBeenCalledWith("mock", undefined);
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: "waiting_approval",
       requiresApproval: true,
       output: {
         voiceCloneJobId,
         voiceSampleId,
+        voiceId: expect.any(String),
         provider: "mock",
         modelId: "mock-model-1",
         sampleUrl: "mock://sample.wav",
@@ -193,6 +195,29 @@ describe("voice clone workflow worker", () => {
     expect(updatedJob).toMatchObject({
       status: "succeeded",
       errorJson: null,
+      outputVoiceId: expect.any(String),
+    });
+
+    const clonedVoice = await prisma.voice.findUnique({
+      where: { id: updatedJob?.outputVoiceId ?? "" },
+    });
+    expect(clonedVoice).toMatchObject({
+      teamId,
+      ownerId: userId,
+      voiceType: "cloned",
+      name: "Voice Clone Worker Sample 克隆音色",
+      provider: "mock",
+      modelId: "mock-model-1",
+      status: "active",
+      licenseStatus: "approved",
+      sampleUrl: "mock://sample.wav",
+      metadata: {
+        voiceCloneJobId,
+        voiceSampleId,
+        sampleAssetId: assetId,
+        providerRequestId: "mock-request-1",
+        trainerLogs: [{ level: "info", message: "training finished" }],
+      },
     });
   });
 

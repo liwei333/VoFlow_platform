@@ -7,6 +7,7 @@ import {
   VOICE_CLONE_MOCK_PROVIDER,
   VOICE_SAMPLE_ERROR_CODES,
   VOICE_SAMPLE_ERROR_MESSAGES,
+  type VoiceSampleErrorCode,
 } from "@/lib/voice-clone/constants";
 
 export type VoiceTrainerLogLevel = "info" | "warn" | "error";
@@ -207,6 +208,6 @@ function isTrainerLogLevel(value: unknown): value is VoiceTrainerLogLevel {
   return value === "info" || value === "warn" || value === "error";
 }
 
-function voiceTrainerError(code: string) {
+function voiceTrainerError(code: VoiceSampleErrorCode) {
   return new VoiceTrainerError(code, VOICE_SAMPLE_ERROR_MESSAGES[code]);
 }

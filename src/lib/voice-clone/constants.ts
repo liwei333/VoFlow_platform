@@ -25,6 +25,9 @@ export const VOICE_SAMPLE_ERROR_CODES = {
   invalidTrainerOutput: "VOICE_CLONE_INVALID_TRAINER_OUTPUT",
 } as const;
 
+export type VoiceSampleErrorCode =
+  (typeof VOICE_SAMPLE_ERROR_CODES)[keyof typeof VOICE_SAMPLE_ERROR_CODES];
+
 export const VOICE_SAMPLE_ERROR_MESSAGES = {
   [VOICE_SAMPLE_ERROR_CODES.notFound]: "声音样本不存在",
   [VOICE_SAMPLE_ERROR_CODES.jobNotFound]: "视频任务不存在",
@@ -67,3 +70,4 @@ export const VOICE_CLONE_GPT_SOVITS_PROVIDER = "gpt-sovits";
 export const VOICE_CLONE_COSYVOICE_PROVIDER = "cosyvoice";
 export const VOICE_CLONE_LOCAL_TRAIN_PATH = "/voice-clone/train";
 export const VOICE_CLONE_LOCAL_TIMEOUT_MS = 60_000;
+export const VOICE_CLONE_OUTPUT_VOICE_NAME_SUFFIX = "克隆音色";

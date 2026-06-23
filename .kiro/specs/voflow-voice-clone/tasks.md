@@ -40,38 +40,38 @@
   - 创建 voice_clone workflow node
   - _Requirements: US-3_
 
-- [ ] 6. 实现本地 Voice Trainer Adapter
+- [x] 6. 实现本地 Voice Trainer Adapter
   - 支持 GPT-SoVITS/CosyVoice 或 mock trainer
   - 返回 model_id、sample_url、训练日志
   - 失败时写入 error_json
   - _Requirements: US-3_
 
-- [ ] 7. 将训练结果写入 voices
+- [x] 7. 将训练结果写入 voices
   - 创建 cloned voice 记录
   - status 为 active
   - license_status 为 approved
   - _Requirements: US-3, US-4_
 
-- [ ] 8. 实现我的声音页面
+- [x] 8. 实现我的声音页面
   - 展示预置音色和克隆音色
   - 支持试听、重训、删除
   - 展示授权状态和训练状态
   - _Requirements: US-4_
 
-- [ ] 9. 实现删除/禁用克隆音色
+- [x] 9. 实现删除/禁用克隆音色
   - 设置 voice status disabled
   - 新 TTS 任务不能选择 disabled 音色
   - 历史任务保留引用
   - _Requirements: US-4_
 
-- [ ] 10. 添加测试
+- [x] 10. 添加测试
   - 未授权不能训练
   - 样本不合格被拒绝
   - mock trainer 生成 cloned voice
   - disabled voice 不能用于 TTS
   - _Requirements: US-1, US-2, US-3, US-4_
 
-- [ ] 11. Checkpoint: 声音克隆验收
+- [x] 11. Checkpoint: 声音克隆验收
   - 用户上传声音样本并授权
   - 本地训练生成克隆音色
   - 我的声音页面可试听、重训、删除
@@ -399,3 +399,331 @@
 - 是否满足对应 Acceptance Criteria：满足 US-3 的训练任务创建前半段：合格且已授权样本可创建 `voice_clone` workflow node 和 `voice_clone_jobs`，未授权或不合格样本被阻断。
 - 是否允许勾选：允许勾选 Task 5，不允许勾选 Task 6-11。
 - MVP 状态矩阵是否需要同步更新：需要，`voflow-voice-clone` 继续保持 `partial`，下一步为 Task 6 实现本地 Voice Trainer Adapter。
+
+### Task 6: 实现本地 Voice Trainer Adapter
+
+### 任务
+- Spec: `voflow-voice-clone`
+- Task: 6
+- Requirements: US-3
+
+### 修改文件
+- `src/lib/voice-clone/constants.ts`
+- `src/services/voiceTrainerService.ts`
+- `src/services/voiceCloneWorkerService.ts`
+- `src/services/workflowWorkerService.ts`
+- `tests/voice-trainer-service.test.ts`
+- `tests/voice-clone-worker-service.test.ts`
+- `tests/workflow-worker-artifact-service.test.ts`
+- `.kiro/specs/voflow-voice-clone/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：实现 `VoiceTrainerService`，支持 `mock` 本地训练器和 `local`/`gpt-sovits`/`cosyvoice` HTTP trainer provider。
+- mock trainer 返回 `modelId`、`sampleUrl`、训练日志和 `providerRequestId`，用于本地开发和无真实 trainer 环境的 workflow 验证。
+- local/GPT-SoVITS/CosyVoice trainer 通过统一 adapter 调用 `/voice-clone/train`，发送样本音频 base64、样本 metadata、job id 和 provider，并归一化 `model_id`、`sample_url`、`logs`、`provider_request_id`。
+- 新增 `voice_clone` workflow node handler：按 `voiceCloneJobId` 和 `voiceSampleId` 读取 `voice_clone_jobs` 与样本 Asset，下载样本音频，调用 trainer，成功后写入 job `status=succeeded`、清空 `errorJson`，并输出模型 metadata。
+- trainer 失败时写入 `voice_clone_jobs.errorJson={ code, message }` 和 `status=failed`，再抛出 `VoiceTrainerError`，让 workflow worker 继续按节点失败/重试链路处理。
+- `createDefaultWorkflowNodeHandlers()` 已注册 `voice_clone` handler，workflow worker 可消费 Task 5 投递的声音克隆节点。
+- 明确未完成：本轮不创建 `voices` 中的 cloned voice 记录，不设置 `VoiceStatus.active` 或 `license_status=approved`；训练结果写入 `voices` 留给 Task 7。
+- 是否使用 mock/provider/adapter 占位：保留 `mock` trainer 作为本地默认 provider；`local`/`gpt-sovits`/`cosyvoice` 已有 HTTP adapter，但真实模型服务需要后续环境配置和端到端联调。
+
+### TDD 记录
+- 本轮接手时 Task 6 相关 service 和测试文件已存在但任务未勾选；先运行 focused tests 验证现有行为，再执行 build 暴露类型问题并返修。
+- GREEN: `tests/voice-trainer-service.test.ts` 覆盖 mock trainer、local trainer 请求/响应归一化、trainer 不可用错误。
+- GREEN: `tests/voice-clone-worker-service.test.ts` 覆盖 workflow handler 成功写 job/output metadata，以及失败时写入 `errorJson`。
+- GREEN: `tests/workflow-worker-artifact-service.test.ts` 覆盖 default workflow handlers 包含 `voice_clone`，以及需要人工确认的 workflow 输出行为。
+- 返修: `npm run build` 首次失败，原因是 `VOICE_SAMPLE_ERROR_MESSAGES[code]` 的 `code` 被推断为宽泛 `string`；新增 `VoiceSampleErrorCode` 类型并用于 trainer/worker error helper 后 build 通过。
+
+### 硬编码检查
+- 是否新增运行时硬编码：未在 worker 中散写 provider、错误码或 node type。
+- 新增配置是否收口：trainer provider、默认 timeout、local trainer endpoint path、mock 输出和错误码均收口在 `src/lib/voice-clone/constants.ts`。
+- 新增错误码/状态/枚举是否收口：`VOICE_CLONE_TRAINER_UNAVAILABLE`、`VOICE_CLONE_INVALID_TRAINER_OUTPUT` 等错误码继续复用 `VOICE_SAMPLE_ERROR_CODES`/`VOICE_SAMPLE_ERROR_MESSAGES`；本轮新增 `VoiceSampleErrorCode` 类型防止错误码索引漂移。
+
+### 公共化检查
+- 复用的公共模块：`WORKFLOW_NODE_DEFINITIONS.voice_clone`、`WORKFLOW_NODE_STATUS`、`getObjectByPath()`、`VoiceCloneJob`、`VoiceSample`、`Asset`、Task 5 的 workflow queue payload。
+- 新增的公共函数/service：`createVoiceTrainer()`、`createMockVoiceTrainer()`、`createLocalVoiceTrainer()`、`createVoiceCloneWorkflowNodeHandler()`。
+- 后续需要抽取的重复逻辑：Task 7 写 cloned voice 时应复用 trainer output 和已有 `Voice`/`VoiceType.cloned`/`VoiceStatus`/`LicenseStatus`，不得在 worker 中另建 voice 状态文案或 license 字符串。
+
+### 验证命令
+- `npm run test:run -- tests/voice-trainer-service.test.ts tests/voice-clone-worker-service.test.ts tests/workflow-worker-artifact-service.test.ts`: 通过，3 files / 12 tests。
+- `npm run test:run -- tests/voice-trainer-service.test.ts tests/voice-clone-worker-service.test.ts tests/workflow-worker-artifact-service.test.ts tests/voice-clone-service.test.ts tests/voice-clone-api.test.ts tests/voice-sample-api.test.ts tests/voice-ui.test.tsx tests/voice-clone-schema.test.ts tests/asset-serializer.test.ts tests/asset-consent.test.ts tests/tts-service.test.ts tests/tts-api.test.ts tests/workflow-constants.test.ts`: 通过，13 files / 64 tests。
+- `npx prisma validate --schema prisma/schema.prisma`: 通过。
+- `npm run lint`: 通过。
+- `npm run build`: 通过。
+- `git diff --check`: 通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 6。
+- 是否满足对应 Acceptance Criteria：满足 US-3 的本地 trainer adapter 和 workflow 执行要求；支持 mock 和本地 HTTP provider，训练成功返回模型 metadata，训练失败写入 `errorJson`。
+- 是否允许勾选：允许勾选 Task 6，不允许勾选 Task 7-11。
+- MVP 状态矩阵是否需要同步更新：需要，`voflow-voice-clone` 继续保持 `partial`，下一步为 Task 7 将训练结果写入 `voices`。
+
+### Task 7: 将训练结果写入 voices
+
+### 任务
+- Spec: `voflow-voice-clone`
+- Task: 7
+- Requirements: US-3、US-4
+
+### 修改文件
+- `src/lib/voice-clone/constants.ts`
+- `src/services/voiceCloneWorkerService.ts`
+- `tests/voice-clone-worker-service.test.ts`
+- `.kiro/specs/voflow-voice-clone/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：`voice_clone` worker 在 trainer 成功返回后创建 `Voice` 记录，并将 `voice_clone_jobs.outputVoiceId` 关联到该 voice。
+- 新建 voice 使用已有 `VoiceType.cloned`、`VoiceStatus.active`、`LicenseStatus.approved`，不新增 voice 主表或重复 enum。
+- cloned voice 写入 `teamId`、`ownerId`、`provider`、`modelId`、`sampleUrl`，并在 metadata 中保留 `voiceCloneJobId`、`voiceSampleId`、`sampleAssetId`、可选 `providerRequestId` 和 `trainerLogs`。
+- workflow output 新增 `voiceId`，下游可从节点 output 或 `voice_clone_jobs.outputVoiceId` 找到生成的 cloned voice。
+- 若 job 已有关联 `outputVoiceId`，worker 会更新既有 voice 并重新关联成功状态，降低重复执行时产生重复 cloned voice 的风险。
+- 明确未完成：本轮不实现“我的声音”页面的试听、重训、删除状态展示；这些留给 Task 8-9。
+- 是否使用 mock/provider/adapter 占位：仍保留 Task 6 的 `mock` trainer 作为本地默认 provider；本轮只消费 trainer output，不新增 provider 占位。
+
+### TDD 记录
+- RED: 先扩展 `tests/voice-clone-worker-service.test.ts`，要求 trainer 成功后返回 `voiceId`、创建 `VoiceType.cloned` 记录、设置 `status=active`、`licenseStatus=approved`，并回填 `voice_clone_jobs.outputVoiceId`；运行 `npm run test:run -- tests/voice-clone-worker-service.test.ts` 失败，原因是 workflow output 缺少 `voiceId`。
+- GREEN: 在 `voiceCloneWorkerService` 成功路径中新增 `persistClonedVoiceFromTrainerOutput()`，用事务创建/更新 cloned voice 并回填 job 后，focused test 通过，1 file / 2 tests。
+- 类型返修: 新增 `VoiceCloneJobWithSample` Prisma payload 类型，避免手写复杂返回类型；`npm run build` 通过。
+
+### 硬编码检查
+- 是否新增运行时硬编码：未在 worker 中散写 voice 状态或授权状态文案；`active`、`approved` 直接使用现有 Prisma enum 值。
+- 新增配置是否收口：输出音色命名后缀收口到 `VOICE_CLONE_OUTPUT_VOICE_NAME_SUFFIX`。
+- 新增错误码/状态/枚举是否收口：未新增错误码、状态或 Prisma enum；继续复用 `VoiceType.cloned`、`VoiceStatus.active`、`LicenseStatus.approved` 和 Task 6 的 trainer error 体系。
+
+### 公共化检查
+- 复用的公共模块：`Voice` 主表、`voice_clone_jobs.outputVoiceId` 关系、`VoiceType.cloned`、`VoiceStatus.active`、`LicenseStatus.approved`、Task 6 的 trainer output。
+- 新增的公共函数/service：`persistClonedVoiceFromTrainerOutput()`、`buildClonedVoiceName()`。
+- 后续需要抽取的重复逻辑：Task 8 我的声音页面应复用 `/api/voices` 的 active/approved voice 查询和 TTS serializer，不应另写 cloned voice 查询规则。
+
+### 验证命令
+- RED: `npm run test:run -- tests/voice-clone-worker-service.test.ts`: 失败，workflow output 缺少 `voiceId`。
+- GREEN: `npm run test:run -- tests/voice-clone-worker-service.test.ts`: 通过，1 file / 2 tests。
+- `npm run test:run -- tests/voice-trainer-service.test.ts tests/voice-clone-worker-service.test.ts tests/workflow-worker-artifact-service.test.ts tests/voice-clone-service.test.ts tests/voice-clone-api.test.ts tests/voice-sample-api.test.ts tests/voice-ui.test.tsx tests/voice-clone-schema.test.ts tests/asset-serializer.test.ts tests/asset-consent.test.ts tests/tts-service.test.ts tests/tts-api.test.ts tests/workflow-constants.test.ts`: 通过，13 files / 64 tests。
+- `npx prisma validate --schema prisma/schema.prisma`: 通过。
+- `npm run lint`: 通过。
+- `npm run build`: 通过。
+- `git diff --check`: 通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 7。
+- 是否满足对应 Acceptance Criteria：满足 US-3、US-4 的训练结果落库要求；trainer 成功后会生成 active/approved 的 cloned voice，并通过 `voice_clone_jobs.outputVoiceId` 关联。
+- 是否允许勾选：允许勾选 Task 7，不允许勾选 Task 8-11。
+- MVP 状态矩阵是否需要同步更新：需要，`voflow-voice-clone` 继续保持 `partial`，下一步为 Task 8 实现我的声音页面。
+
+### Task 8: 实现我的声音页面
+
+### 任务
+- Spec: `voflow-voice-clone`
+- Task: 8
+- Requirements: US-4
+
+### 修改文件
+- `src/app/dashboard/voices/page.tsx`
+- `src/app/api/voices/[voiceId]/route.ts`
+- `src/lib/voice-clone/ui.ts`
+- `src/services/voiceService.ts`
+- `tests/voice-ui.test.tsx`
+- `tests/voice-api.test.ts`
+- `.kiro/specs/voflow-voice-clone/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：我的声音页面按 `preset` / `cloned` 分区展示音色，继续复用 `/api/voices` 的 active/approved 查询结果和 TTS voice serializer。
+- 页面新增声音授权状态和训练状态展示，上传样本、确认授权、创建训练任务后可看到当前授权/训练状态。
+- 页面音色卡片展示授权状态、可用状态、provider/modelId，并在存在 `sampleUrl` 时提供试听 audio 控件。
+- 克隆音色卡片新增“重训”入口，复用 Task 5 的 `/api/voices/clone` 训练任务创建链路；在未上传合格样本、未确认授权或未选择视频任务时保持禁用。
+- 克隆音色卡片新增“删除”入口；本轮补齐窄范围 `DELETE /api/voices/{voiceId}`，只允许删除当前 team 的 cloned voice，实际操作为设置 `Voice.status=disabled`，历史 TTS 任务引用不变。
+- 明确未完成：本轮未做完整的 disabled voice 端到端验收矩阵、历史任务展示复核或更强的 TTS 禁用覆盖；这些留给 Task 9。
+- 是否使用 mock/provider/adapter 占位：页面仍展示现有 mock/local trainer 生成的 cloned voice；本轮不新增 provider。
+
+### TDD 记录
+- RED: 扩展 `tests/voice-ui.test.tsx`，要求页面包含预置/克隆音色分区、试听、重训、删除、授权状态和训练状态，并要求 voice UI helper 可稳定分组和映射状态；初次运行失败，原因是页面没有对应分区/按钮且 helper 不存在。
+- RED: 新增 `tests/voice-api.test.ts`，要求 `DELETE /api/voices/{voiceId}` 将团队 cloned voice 设置为 `disabled`；初次运行失败，原因是 route 未导出 `DELETE`。
+- GREEN: 新增 `groupVoicesByType()`、`getVoiceStatusLabel()`、`getVoiceLicenseLabel()`、`getVoiceCloneTrainingStatusLabel()`，并将 helper 收口到 `src/lib/voice-clone/ui.ts`，避免 Next app page 额外导出导致 build 失败。
+- GREEN: 新增 `disableClonedVoice()` service 和 `DELETE /api/voices/{voiceId}`，focused tests 通过，2 files / 4 tests。
+
+### 硬编码检查
+- 是否新增运行时硬编码：未在 route 中散写 cloned voice 查询规则；删除逻辑收口到 `disableClonedVoice()`。
+- 新增配置是否收口：UI 状态标签、分组 helper 和训练状态 label 收口到 `src/lib/voice-clone/ui.ts`。
+- 新增错误码/状态/枚举是否收口：未新增 Prisma enum；删除入口复用 `VoiceStatus.disabled`，API service 返回 `VOICE_NOT_FOUND` / `VOICE_DISABLE_FAILED`。
+
+### 公共化检查
+- 复用的公共模块：`requireAuth`、统一 API response、`serializeVoice`、`serializeVoices`、`listAvailableVoices()`、`createVoiceCloneTrainingTask()`、`Voice.status=disabled`、TTS active voice 过滤。
+- 新增的公共函数/service：`disableClonedVoice()`、`groupVoicesByType()`、`getVoiceStatusLabel()`、`getVoiceLicenseLabel()`、`getVoiceCloneTrainingStatusLabel()`。
+- 后续需要抽取的重复逻辑：Task 9 应复核 disabled voice 不能用于 TTS 的 service/API 覆盖，并明确历史任务保留引用的验收。
+
+### 验证命令
+- RED: `npm run test:run -- tests/voice-ui.test.tsx tests/voice-api.test.ts`: 失败，缺少 UI helper/入口和 `DELETE` route。
+- GREEN: `npm run test:run -- tests/voice-ui.test.tsx tests/voice-api.test.ts`: 通过，2 files / 4 tests。
+- `npm run build`: 通过。
+- `npm run test:run -- tests/voice-trainer-service.test.ts tests/voice-clone-worker-service.test.ts tests/workflow-worker-artifact-service.test.ts tests/voice-clone-service.test.ts tests/voice-clone-api.test.ts tests/voice-api.test.ts tests/voice-sample-api.test.ts tests/voice-ui.test.tsx tests/voice-clone-schema.test.ts tests/asset-serializer.test.ts tests/asset-consent.test.ts tests/tts-service.test.ts tests/tts-api.test.ts tests/workflow-constants.test.ts`: 通过。
+- `npx prisma validate --schema prisma/schema.prisma`: 通过。
+- `npm run lint`: 通过。
+- `git diff --check`: 通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 8。
+- 是否满足对应 Acceptance Criteria：满足 US-4 的我的声音页面基础管理要求；页面可展示预置/克隆音色、试听、重训、删除入口，并展示授权与训练状态。
+- 是否允许勾选：允许勾选 Task 8，不允许勾选 Task 9-11。
+- MVP 状态矩阵是否需要同步更新：需要，`voflow-voice-clone` 继续保持 `partial`，下一步为 Task 9 实现删除/禁用克隆音色的完整验收。
+
+### Task 9: 实现删除/禁用克隆音色
+
+### 任务
+- Spec: `voflow-voice-clone`
+- Task: 9
+- Requirements: US-4
+
+### 修改文件
+- `tests/tts-service.test.ts`
+- `tests/tts-api.test.ts`
+- `tests/voice-api.test.ts`
+- `.kiro/specs/voflow-voice-clone/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：复核并补齐删除/禁用克隆音色的完整验收覆盖。
+- `DELETE /api/voices/{voiceId}` 的业务实现已在 Task 8 落地，本轮通过 API 测试确认它会把当前 team 的 cloned voice 设置为 `disabled`。
+- 新 TTS 任务不能选择 disabled voice：`createTtsWorkflowTask()` 已通过 `Voice.status=active` 查询过滤实现，本轮新增 service 和 API 测试固定该行为。
+- 历史任务保留引用：本轮新增测试先创建 TTS request，再把 cloned voice 置为 `disabled`，确认既有 `tts_requests.voiceId` 和关联 `voice` 仍保留。
+- 预置音色保护：本轮新增 API 测试确认 `DELETE /api/voices/{voiceId}` 不会禁用 preset voice。
+- 明确未完成：本轮不新增物理删除、不清理历史 TTS、不删除声音样本或训练 job；这些不属于当前 Spec 的安全删除口径。
+- 是否使用 mock/provider/adapter 占位：未新增 provider 或 mock；测试继续使用已有 mock voice/provider。
+
+### TDD 记录
+- 先补 `tests/tts-service.test.ts`：覆盖 disabled cloned voice 创建新 TTS 返回 `VOICE_NOT_FOUND`，以及历史 TTS request 在 voice 禁用后仍保留引用。
+- 先补 `tests/tts-api.test.ts`：覆盖 `POST /api/video-jobs/{jobId}/tts` 选择 disabled cloned voice 返回 400 / `VOICE_NOT_FOUND`。
+- 先补 `tests/voice-api.test.ts`：覆盖 `DELETE /api/voices/{voiceId}` 不会禁用 preset voice。
+- 首次 focused run 暴露测试清理顺序问题：历史引用场景下直接删除 voice 会触发 `tts_requests_voiceId_fkey`，这符合“历史任务保留引用”的约束；修正测试清理后 focused tests 通过。
+- 本轮未新增生产业务实现；Task 9 行为由 Task 8 的 `disableClonedVoice()` 和既有 TTS active voice 过滤承接。
+
+### 硬编码检查
+- 是否新增运行时硬编码：否，本轮未新增运行时代码。
+- 新增配置是否收口：无新增配置。
+- 新增错误码/状态/枚举是否收口：无新增错误码或 enum；测试固定已有 `VOICE_NOT_FOUND` 和 `Voice.status=disabled` 行为。
+
+### 公共化检查
+- 复用的公共模块：`disableClonedVoice()`、`DELETE /api/voices/{voiceId}`、`createTtsWorkflowTask()`、`POST /api/video-jobs/{jobId}/tts`、`VoiceStatus.disabled`、`TTS_ERROR_CODES.VOICE_NOT_FOUND`。
+- 新增的公共函数/service：无。
+- 后续需要抽取的重复逻辑：Task 10 可直接复用本轮 service/API 测试作为测试清单中的 disabled voice 覆盖，不需要再重复定义禁用规则。
+
+### 验证命令
+- `npm run test:run -- tests/tts-service.test.ts tests/voice-api.test.ts`: 首次失败，原因是历史引用测试中手动删除 voice 触发 FK，修正测试清理后通过。
+- `npm run test:run -- tests/tts-service.test.ts tests/tts-api.test.ts tests/voice-api.test.ts`: 通过，3 files / 10 tests。
+- `npm run test:run -- tests/voice-trainer-service.test.ts tests/voice-clone-worker-service.test.ts tests/workflow-worker-artifact-service.test.ts tests/voice-clone-service.test.ts tests/voice-clone-api.test.ts tests/voice-api.test.ts tests/voice-sample-api.test.ts tests/voice-ui.test.tsx tests/voice-clone-schema.test.ts tests/asset-serializer.test.ts tests/asset-consent.test.ts tests/tts-service.test.ts tests/tts-api.test.ts tests/workflow-constants.test.ts`: 通过。
+- `npx prisma validate --schema prisma/schema.prisma`: 通过。
+- `npm run lint`: 通过。
+- `npm run build`: 通过。
+- `git diff --check`: 通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 9。
+- 是否满足对应 Acceptance Criteria：满足 US-4 的删除/禁用要求；cloned voice 删除即禁用，新 TTS 不能选择 disabled voice，历史 TTS request 保留 voice 引用。
+- 是否允许勾选：允许勾选 Task 9，不允许勾选 Task 10-11。
+- MVP 状态矩阵是否需要同步更新：需要，`voflow-voice-clone` 继续保持 `partial`，下一步为 Task 10 添加测试。
+
+### Task 10: 添加测试
+
+### 任务
+- Spec: `voflow-voice-clone`
+- Task: 10
+- Requirements: US-1、US-2、US-3、US-4
+
+### 修改文件
+- `.kiro/specs/voflow-voice-clone/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：复核 Task 0-9 已补充的测试，形成 Task 10 测试总清单，并确认四个必测点均有现有自动化覆盖。
+- 本轮未新增生产代码，也未新增重复测试；现有 service、worker、API 测试已经覆盖 Task 10 的验收点。
+- 明确未完成：未执行真实 trainer 训练或真实浏览器人工验收；这些属于 Task 11 checkpoint 和后续真实环境复验。
+- 是否使用 mock/provider/adapter 占位：测试中的训练输出继续使用 mock trainer/provider；该占位边界已由 `tests/voice-trainer-service.test.ts` 和 `tests/voice-clone-worker-service.test.ts` 固定。
+
+### 测试总清单
+- 未授权不能训练：`tests/voice-clone-service.test.ts` 的 `rejects training when voice consent is missing` 覆盖 `createVoiceCloneTrainingTask()` 在缺少 `voice_consents` 时返回 `VOICE_SAMPLE_CONSENT_REQUIRED`，并断言不会创建 `workflow_nodes` 或 `voice_clone_jobs`。
+- 样本不合格被拒绝：`tests/voice-clone-service.test.ts` 的 `rejects training when the voice sample has not passed quality checks` 覆盖 `qualityReport.passed=false` 时返回 `VOICE_SAMPLE_QUALITY_NOT_PASSED`，并断言不会创建训练节点或训练 job；`tests/voice-sample-api.test.ts` 同时覆盖上传阶段的过短、静音过高和噪声过高阻断。
+- mock trainer 生成 cloned voice：`tests/voice-trainer-service.test.ts` 覆盖 mock trainer 返回 `modelId`、`sampleUrl` 和训练日志；`tests/voice-clone-worker-service.test.ts` 的 `runs the trainer, creates a cloned voice, links it to the job, and returns model metadata` 覆盖 worker 下载样本、调用 mock trainer、创建 `Voice(voiceType=cloned,status=active,licenseStatus=approved)`、写入 metadata，并回填 `voice_clone_jobs.outputVoiceId`。
+- disabled voice 不能用于 TTS：`tests/tts-service.test.ts` 的 `rejects new TTS tasks when a cloned voice has been disabled` 覆盖 service 层返回 `VOICE_NOT_FOUND`；`tests/tts-api.test.ts` 的 `rejects new TTS tasks that select a disabled cloned voice` 覆盖 API 返回 400；`tests/tts-service.test.ts` 的历史引用测试确认 disabled 后既有 `tts_requests.voiceId` 保留；`tests/voice-api.test.ts` 覆盖 DELETE 只禁用 cloned voice 且不禁用 preset voice。
+
+### 覆盖缺口复核
+- service 覆盖：已覆盖训练创建的授权/质检失败、合格授权成功、TTS 禁用拒绝和历史引用保留。
+- worker 覆盖：已覆盖 `voice_clone` worker 成功生成 cloned voice、关联 `outputVoiceId`，以及 trainer 失败写入 `errorJson`。
+- API 覆盖：已覆盖 `/api/voices/clone` 训练任务创建、`/api/voices/samples` 上传/授权、`DELETE /api/voices/{voiceId}` 禁用，以及 `/api/video-jobs/{jobId}/tts` 选择 disabled voice 的失败响应。
+- UI 覆盖：`tests/voice-ui.test.tsx` 覆盖我的声音页面的预置/克隆分区、试听、重训、删除入口、授权状态和训练状态展示。
+- 当前无新增自动化缺口；真实端到端上传、授权、训练、试听、重训、删除、TTS 选择克隆音色留给 Task 11 checkpoint。
+
+### 硬编码检查
+- 是否新增运行时硬编码：否，本轮只更新任务文档。
+- 新增配置是否收口：无新增配置。
+- 新增错误码/状态/枚举是否收口：无新增错误码、状态或 enum；本轮仅映射现有 `VOICE_SAMPLE_CONSENT_REQUIRED`、`VOICE_SAMPLE_QUALITY_NOT_PASSED`、`VOICE_NOT_FOUND`、`Voice.status=disabled` 等测试断言。
+
+### 公共化检查
+- 复用的公共模块：`createVoiceCloneTrainingTask()`、`createVoiceCloneWorkflowNodeHandler()`、`createMockVoiceTrainer()`、`createTtsWorkflowTask()`、`disableClonedVoice()`、`VOICE_CONSENT_USAGE_SCOPES`、voice clone constants、TTS voice active/approved 过滤。
+- 新增的公共函数/service：无。
+- 后续需要抽取的重复逻辑：当前无新增重复逻辑；Task 11 只做 checkpoint 验收时应继续复用现有 API/service，不再新增并行验收脚本逻辑。
+
+### 验证命令
+- `npm run test:run -- tests/voice-clone-service.test.ts tests/voice-trainer-service.test.ts tests/voice-clone-worker-service.test.ts tests/voice-sample-api.test.ts tests/voice-clone-api.test.ts tests/voice-api.test.ts tests/tts-service.test.ts tests/tts-api.test.ts tests/voice-ui.test.tsx`: 通过。
+- `npm run test:run -- tests/voice-trainer-service.test.ts tests/voice-clone-worker-service.test.ts tests/workflow-worker-artifact-service.test.ts tests/voice-clone-service.test.ts tests/voice-clone-api.test.ts tests/voice-api.test.ts tests/voice-sample-api.test.ts tests/voice-ui.test.tsx tests/voice-clone-schema.test.ts tests/asset-serializer.test.ts tests/asset-consent.test.ts tests/tts-service.test.ts tests/tts-api.test.ts tests/workflow-constants.test.ts`: 通过。
+- `npx prisma validate --schema prisma/schema.prisma`: 通过。
+- `npm run lint`: 通过。
+- `npm run build`: 通过。
+- `git diff --check`: 通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 10。
+- 是否满足对应 Acceptance Criteria：满足 US-1、US-2、US-3、US-4 的测试覆盖要求；未授权训练、不合格样本、mock trainer 生成 cloned voice、disabled voice 禁用于新 TTS 均已映射到可复验自动化测试。
+- 是否允许勾选：允许勾选 Task 10，不允许勾选 Task 11。
+- MVP 状态矩阵是否需要同步更新：需要，`voflow-voice-clone` 继续保持 `partial`，下一步为 Task 11 执行声音克隆 checkpoint 验收。
+
+### Task 11: Checkpoint 声音克隆验收
+
+### 任务
+- Spec: `voflow-voice-clone`
+- Task: 11
+- Requirements: US-1、US-2、US-3、US-4
+
+### 修改文件
+- `tests/tts-api.test.ts`
+- `.kiro/specs/voflow-voice-clone/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：按 checkpoint 逐条验收声音克隆主链路：上传声音样本并授权、本地训练生成克隆音色、我的声音页面试听/重训/删除、克隆音色用于 TTS。
+- 新增一条明确的 API 验收测试：`POST /api/video-jobs/{jobId}/tts` 使用 active/approved cloned voice 时返回 `SUCCESS`，创建 queued TTS node 和 tts request。
+- 修正 `tests/tts-api.test.ts` 清理逻辑，清理当前 team 生成的测试 cloned voice，避免 checkpoint 正向用例污染后续测试数据。
+- 明确未完成：未接入真实 GPT-SoVITS/CosyVoice 训练服务做人工端到端训练；当前 checkpoint 的训练链路以 mock/local adapter 自动化验收为准。
+- 是否使用 mock/provider/adapter 占位：使用 mock trainer 验收本地训练输出、cloned voice 落库和 TTS 选择链路；local/GPT-SoVITS/CosyVoice adapter 已存在，但真实模型服务需在最终环境复验。
+
+### Checkpoint 逐条验收
+- 用户上传声音样本并授权：`tests/voice-sample-api.test.ts` 覆盖 `POST /api/voices/samples` 上传音频样本、写入 `Asset(type=audio)` 和 `VoiceSample.qualityReport`；同文件覆盖 `POST /api/voices/samples/{sampleId}/consents` 写入 `voice_consents`，并要求 `usageScope` 同时包含 `voice_clone` 和 `tts_generation`。
+- 本地训练生成克隆音色：`tests/voice-clone-api.test.ts` 覆盖合格且已授权样本可创建 `voice_clone` workflow node 和 `voice_clone_jobs`；`tests/voice-trainer-service.test.ts` 覆盖 mock/local trainer output；`tests/voice-clone-worker-service.test.ts` 覆盖 worker 下载样本、调用 trainer、创建 `Voice(voiceType=cloned,status=active,licenseStatus=approved)`，并关联 `voice_clone_jobs.outputVoiceId`。
+- 我的声音页面可试听、重训、删除：`tests/voice-ui.test.tsx` 覆盖预置/克隆音色分区、试听、重训、删除入口、授权状态和训练状态展示；`tests/voice-api.test.ts` 覆盖 `DELETE /api/voices/{voiceId}` 将 cloned voice 设置为 `disabled`，并确认 preset voice 不会被禁用。
+- 克隆音色可用于 TTS：`tests/tts-service.test.ts` 覆盖 active/approved cloned voice 可创建 TTS request 并在禁用后保留历史引用；本轮新增 `tests/tts-api.test.ts` 的 `creates a new TTS task with an active approved cloned voice`，覆盖 API 层使用 active/approved cloned voice 创建 queued TTS 任务。
+
+### 硬编码检查
+- 是否新增运行时硬编码：否，本轮只新增测试断言和任务文档。
+- 新增配置是否收口：无新增配置。
+- 新增错误码/状态/枚举是否收口：无新增错误码或 enum；测试复用现有 `VoiceType.cloned`、`VoiceStatus.active`、`LicenseStatus.approved`、`TTS_NODE_TYPE` 输出语义和统一 API response。
+
+### 公共化检查
+- 复用的公共模块：`uploadAssetFile()`、`createVoiceSampleFromUpload()`、`confirmVoiceSampleConsent()`、`createVoiceCloneTrainingTask()`、`createVoiceCloneWorkflowNodeHandler()`、`createMockVoiceTrainer()`、`disableClonedVoice()`、`createTtsWorkflowTask()`、统一 API response、`requireAuth`。
+- 新增的公共函数/service：无。
+- 后续需要抽取的重复逻辑：无新增重复逻辑；后续 `voflow-video-render` 应直接消费已有 TTS audio artifact、cloned voice 和 workflow node，不应重新实现声音克隆状态判断。
+
+### 验证命令
+- `npm run test:run -- tests/tts-api.test.ts`: 通过，1 file / 3 tests。
+- `npm run test:run -- tests/voice-sample-api.test.ts tests/voice-clone-api.test.ts tests/voice-trainer-service.test.ts tests/voice-clone-worker-service.test.ts tests/voice-ui.test.tsx tests/voice-api.test.ts tests/tts-service.test.ts tests/tts-api.test.ts`: 通过。
+- `npm run test:run -- tests/voice-trainer-service.test.ts tests/voice-clone-worker-service.test.ts tests/workflow-worker-artifact-service.test.ts tests/voice-clone-service.test.ts tests/voice-clone-api.test.ts tests/voice-api.test.ts tests/voice-sample-api.test.ts tests/voice-ui.test.tsx tests/voice-clone-schema.test.ts tests/asset-serializer.test.ts tests/asset-consent.test.ts tests/tts-service.test.ts tests/tts-api.test.ts tests/workflow-constants.test.ts`: 通过。
+- `npx prisma validate --schema prisma/schema.prisma`: 通过。
+- `npm run lint`: 通过。
+- `npm run build`: 通过。
+- `git diff --check`: 通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 11。
+- 是否满足对应 Acceptance Criteria：满足 US-1、US-2、US-3、US-4 的 checkpoint 自动化验收；声音样本上传/授权、训练任务、mock/local trainer 生成 cloned voice、我的声音管理入口、cloned voice 用于 TTS 均有可复验覆盖。
+- 是否允许勾选：允许勾选 Task 11。
+- MVP 状态矩阵是否需要同步更新：需要，`voflow-voice-clone` 业务任务已全部完成；因真实 GPT-SoVITS/CosyVoice 训练服务未在本 checkpoint 人工联调，MVP 行仍保持 `partial`，后续真实环境复验时再升级为 `done`。

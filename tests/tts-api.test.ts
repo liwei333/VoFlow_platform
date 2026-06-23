@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { createSessionToken } from "@/lib/auth";
-import { GET as listTtsResults } from "@/app/api/video-jobs/[jobId]/tts/route";
+import {
+  GET as listTtsResults,
+  POST as createTtsTask,
+} from "@/app/api/video-jobs/[jobId]/tts/route";
 
 describe("TTS APIs", () => {
   let userId: string;
@@ -139,7 +142,11 @@ describe("TTS APIs", () => {
     await prisma.ttsRequest.deleteMany({ where: { jobId } });
     await prisma.artifact.deleteMany({ where: { jobId } });
     await prisma.workflowNode.deleteMany({ where: { jobId } });
-    await prisma.voice.deleteMany({ where: { id: voiceId } });
+    await prisma.voice.deleteMany({
+      where: {
+        OR: [{ id: voiceId }, { teamId }],
+      },
+    });
     await prisma.scriptCandidate.deleteMany({ where: { scriptId } });
     await prisma.script.deleteMany({ where: { id: scriptId } });
     await prisma.videoJob.deleteMany({ where: { id: jobId } });
@@ -174,7 +181,100 @@ describe("TTS APIs", () => {
     });
   });
 
-  async function createRequest(): Promise<NextRequest> {
+  it("rejects new TTS tasks that select a disabled cloned voice", async () => {
+    const disabledVoice = await prisma.voice.create({
+      data: {
+        teamId,
+        ownerId: userId,
+        voiceType: "cloned",
+        name: "已停用克隆音色",
+        provider: "mock",
+        modelId: "disabled-cloned-voice",
+        status: "disabled",
+        licenseStatus: "approved",
+      },
+    });
+
+    const response = await createTtsTask(
+      await createRequest({
+        method: "POST",
+        body: {
+          voiceId: disabledVoice.id,
+          scriptCandidateId: candidateId,
+          params: {
+            speed: 1,
+            pitch: 0,
+          },
+        },
+      }),
+      {
+        params: Promise.resolve({ jobId }),
+      }
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "VOICE_NOT_FOUND",
+      message: "音色不存在",
+    });
+  });
+
+  it("creates a new TTS task with an active approved cloned voice", async () => {
+    const clonedVoice = await prisma.voice.create({
+      data: {
+        teamId,
+        ownerId: userId,
+        voiceType: "cloned",
+        name: "我的克隆音色",
+        provider: "mock",
+        modelId: "active-cloned-voice",
+        status: "active",
+        licenseStatus: "approved",
+        sampleUrl: "mock://active-cloned-voice.wav",
+      },
+    });
+
+    const response = await createTtsTask(
+      await createRequest({
+        method: "POST",
+        body: {
+          voiceId: clonedVoice.id,
+          scriptCandidateId: candidateId,
+          params: {
+            speed: 1,
+            pitch: 0,
+          },
+        },
+      }),
+      {
+        params: Promise.resolve({ jobId }),
+      }
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "SUCCESS",
+      data: {
+        ttsRequest: {
+          jobId,
+          voiceId: clonedVoice.id,
+          scriptCandidateId: candidateId,
+          provider: "mock",
+          status: "queued",
+        },
+        node: {
+          jobId,
+          nodeType: "tts",
+          status: "queued",
+        },
+      },
+    });
+  });
+
+  async function createRequest(options: {
+    method?: string;
+    body?: unknown;
+  } = {}): Promise<NextRequest> {
     const token = await createSessionToken({
       userId,
       teamId,
@@ -183,10 +283,12 @@ describe("TTS APIs", () => {
     });
 
     return new NextRequest(`http://localhost:3000/api/video-jobs/${jobId}/tts`, {
-      method: "GET",
+      method: options.method ?? "GET",
       headers: {
         cookie: `session=${token}`,
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
       },
+      ...(options.body ? { body: JSON.stringify(options.body) } : {}),
     });
   }
 });

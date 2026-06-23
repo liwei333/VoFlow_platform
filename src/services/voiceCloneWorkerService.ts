@@ -4,8 +4,10 @@ import { getObjectByPath } from "@/lib/storage";
 import { prisma } from "@/lib/db";
 import {
   VOICE_CLONE_MOCK_PROVIDER,
+  VOICE_CLONE_OUTPUT_VOICE_NAME_SUFFIX,
   VOICE_SAMPLE_ERROR_CODES,
   VOICE_SAMPLE_ERROR_MESSAGES,
+  type VoiceSampleErrorCode,
 } from "@/lib/voice-clone/constants";
 import { WORKFLOW_NODE_DEFINITIONS } from "@/lib/workflow/constants";
 import { WORKFLOW_NODE_STATUS } from "@/lib/workflow/status";
@@ -15,6 +17,7 @@ import {
   VoiceTrainerError,
   type LocalVoiceTrainerServiceConfig,
   type VoiceTrainer,
+  type VoiceTrainerOutput,
 } from "@/services/voiceTrainerService";
 
 export interface VoiceCloneSampleStorage {
@@ -39,6 +42,10 @@ type VoiceCloneNodeInput = {
   voiceSampleId: string;
   provider: string;
 };
+
+type VoiceCloneJobWithSample = Prisma.VoiceCloneJobGetPayload<{
+  include: { voiceSample: { include: { asset: true } } };
+}>;
 
 const objectStorage: VoiceCloneSampleStorage = {
   async downloadObject(storageUrl) {
@@ -108,13 +115,7 @@ export function createVoiceCloneWorkflowNodeHandler(
         traceId: payload.traceId,
       });
 
-      await prisma.voiceCloneJob.update({
-        where: { id: voiceCloneJob.id },
-        data: {
-          status: "succeeded",
-          errorJson: Prisma.JsonNull,
-        },
-      });
+      const outputVoice = await persistClonedVoiceFromTrainerOutput(voiceCloneJob, trainerOutput);
 
       return {
         status: WORKFLOW_NODE_STATUS.WAITING_APPROVAL,
@@ -122,6 +123,7 @@ export function createVoiceCloneWorkflowNodeHandler(
         output: {
           voiceCloneJobId: voiceCloneJob.id,
           voiceSampleId: voiceCloneJob.voiceSampleId,
+          voiceId: outputVoice.id,
           provider: trainerOutput.provider,
           modelId: trainerOutput.modelId,
           sampleUrl: trainerOutput.sampleUrl,
@@ -146,6 +148,56 @@ export function createVoiceCloneWorkflowNodeHandler(
       throw new VoiceTrainerError(normalized.code, normalized.message);
     }
   };
+}
+
+async function persistClonedVoiceFromTrainerOutput(
+  voiceCloneJob: VoiceCloneJobWithSample,
+  trainerOutput: VoiceTrainerOutput
+) {
+  return prisma.$transaction(async (tx) => {
+    const voiceData = {
+      teamId: voiceCloneJob.voiceSample.teamId,
+      ownerId: voiceCloneJob.voiceSample.ownerId,
+      voiceType: "cloned" as const,
+      name: buildClonedVoiceName(voiceCloneJob.voiceSample.asset.name),
+      provider: trainerOutput.provider,
+      modelId: trainerOutput.modelId,
+      status: "active" as const,
+      licenseStatus: "approved" as const,
+      sampleUrl: trainerOutput.sampleUrl,
+      metadata: toPrismaJson({
+        voiceCloneJobId: voiceCloneJob.id,
+        voiceSampleId: voiceCloneJob.voiceSampleId,
+        sampleAssetId: voiceCloneJob.voiceSample.assetId,
+        ...(trainerOutput.providerRequestId
+          ? { providerRequestId: trainerOutput.providerRequestId }
+          : {}),
+        trainerLogs: trainerOutput.logs,
+      }),
+    };
+
+    const outputVoice = voiceCloneJob.outputVoiceId
+      ? await tx.voice.update({
+          where: { id: voiceCloneJob.outputVoiceId },
+          data: voiceData,
+          select: { id: true },
+        })
+      : await tx.voice.create({
+          data: voiceData,
+          select: { id: true },
+        });
+
+    await tx.voiceCloneJob.update({
+      where: { id: voiceCloneJob.id },
+      data: {
+        status: "succeeded",
+        outputVoiceId: outputVoice.id,
+        errorJson: Prisma.JsonNull,
+      },
+    });
+
+    return outputVoice;
+  });
 }
 
 async function readRegisteredLocalTrainerService(): Promise<LocalVoiceTrainerServiceConfig | null> {
@@ -200,7 +252,7 @@ function normalizeVoiceTrainerError(error: unknown) {
   };
 }
 
-function voiceTrainerError(code: string) {
+function voiceTrainerError(code: VoiceSampleErrorCode) {
   return new VoiceTrainerError(code, VOICE_SAMPLE_ERROR_MESSAGES[code]);
 }
 
@@ -214,6 +266,10 @@ function toPrismaJson(value: unknown): Prisma.InputJsonValue | typeof Prisma.Jso
 
 function getFileName(storageUrl: string): string {
   return storageUrl.substring(storageUrl.lastIndexOf("/") + 1);
+}
+
+function buildClonedVoiceName(sampleName: string): string {
+  return `${sampleName} ${VOICE_CLONE_OUTPUT_VOICE_NAME_SUFFIX}`;
 }
 
 async function readableToBuffer(readable: Readable): Promise<Buffer> {

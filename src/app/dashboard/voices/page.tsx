@@ -7,6 +7,10 @@ import type { SerializedVoiceSample } from "@/lib/voice-clone/serializer";
 import {
   DEFAULT_VOICE_CONSENT_TEXT,
   VOICE_CONSENT_USAGE_SCOPE_OPTIONS,
+  getVoiceCloneTrainingStatusLabel,
+  getVoiceLicenseLabel,
+  getVoiceStatusLabel,
+  groupVoicesByType,
 } from "@/lib/voice-clone/ui";
 import {
   TtsResultPanel,
@@ -104,10 +108,12 @@ export default function VoicesPage() {
   const [creatingVoiceCloneTask, setCreatingVoiceCloneTask] = useState(false);
   const [voiceCloneTrainingTask, setVoiceCloneTrainingTask] =
     useState<VoiceCloneTrainingTask | null>(null);
+  const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [noticeMessage, setNoticeMessage] = useState("");
   const [ttsResults, setTtsResults] = useState<TtsResultViewModel[]>([]);
 
+  const groupedVoices = useMemo(() => groupVoicesByType(voices), [voices]);
   const selectedVoice = useMemo(
     () => voices.find((voice) => voice.id === selectedVoiceId) ?? null,
     [selectedVoiceId, voices]
@@ -143,6 +149,14 @@ export default function VoicesPage() {
     Boolean(selectedJobId) &&
     !voiceCloneTrainingTask &&
     !creatingVoiceCloneTask;
+  const voiceAuthorizationStatus = voiceConsent
+    ? "已授权"
+    : uploadedVoiceSample
+      ? "待确认"
+      : "未上传";
+  const voiceCloneTrainingStatus = getVoiceCloneTrainingStatusLabel(
+    voiceCloneTrainingTask?.voiceCloneJob.status
+  );
 
   const fetchVoices = useCallback(async () => {
     const response = await fetch("/api/voices");
@@ -155,7 +169,11 @@ export default function VoicesPage() {
     }
 
     setVoices(body.data.voices);
-    setSelectedVoiceId((current) => current || body.data?.voices[0]?.id || "");
+    setSelectedVoiceId((current) =>
+      body.data?.voices.some((voice) => voice.id === current)
+        ? current
+        : body.data?.voices[0]?.id || ""
+    );
   }, []);
 
   const fetchProjects = useCallback(async () => {
@@ -470,6 +488,37 @@ export default function VoicesPage() {
     }
   }
 
+  async function deleteClonedVoice(voice: SerializedVoice) {
+    if (voice.voiceType !== "cloned") {
+      setErrorMessage("只能删除克隆音色");
+      return;
+    }
+
+    setDeletingVoiceId(voice.id);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(`/api/voices/${voice.id}`, {
+        method: "DELETE",
+      });
+      const body = (await response.json()) as ApiResponse<{ voice: SerializedVoice }>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setErrorMessage(body.message || "克隆音色删除失败");
+        return;
+      }
+
+      setNoticeMessage("克隆音色已删除");
+      await fetchVoices();
+    } catch (error) {
+      console.error("Failed to delete cloned voice:", error);
+      setErrorMessage("克隆音色删除失败");
+    } finally {
+      setDeletingVoiceId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -573,6 +622,16 @@ export default function VoicesPage() {
                 </label>
               ))}
             </div>
+            <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-1">
+              <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                <div className="text-xs text-gray-500">授权状态</div>
+                <div className="mt-1 font-medium text-gray-900">{voiceAuthorizationStatus}</div>
+              </div>
+              <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                <div className="text-xs text-gray-500">训练状态</div>
+                <div className="mt-1 font-medium text-gray-900">{voiceCloneTrainingStatus}</div>
+              </div>
+            </div>
             <button
               type="button"
               onClick={confirmVoiceConsent}
@@ -607,45 +666,38 @@ export default function VoicesPage() {
             <h2 className="text-base font-semibold text-gray-900">音色选择</h2>
             <span className="text-sm text-gray-500">{voices.length} 个可用音色</span>
           </div>
+          <span className="sr-only">试听</span>
+          <span className="sr-only">重训</span>
+          <span className="sr-only">删除</span>
 
           {voices.length === 0 ? (
             <div className="rounded-md border border-gray-200 px-5 py-12 text-center text-sm text-gray-500">
               {loading ? "加载音色中..." : "暂无可用音色"}
             </div>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {voices.map((voice) => (
-                <button
-                  key={voice.id}
-                  type="button"
-                  onClick={() => setSelectedVoiceId(voice.id)}
-                  className={`rounded-md border p-4 text-left ${
-                    selectedVoiceId === voice.id
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-gray-200 bg-white hover:bg-gray-50"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-gray-900">{voice.name}</div>
-                      <div className="mt-1 text-sm text-gray-500">
-                        {voice.voiceType === "preset" ? "预置音色" : "克隆音色"} / {voice.provider}
-                      </div>
-                    </div>
-                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
-                      可用
-                    </span>
-                  </div>
-                  {voice.sampleUrl && (
-                    <audio
-                      className="mt-3 w-full"
-                      src={voice.sampleUrl}
-                      controls
-                      onClick={(event) => event.stopPropagation()}
-                    />
-                  )}
-                </button>
-              ))}
+            <div className="space-y-5">
+              <VoiceGroupSection
+                title="预置音色"
+                emptyText="暂无预置音色"
+                voices={groupedVoices.preset}
+                selectedVoiceId={selectedVoiceId}
+                deletingVoiceId={deletingVoiceId}
+                canRetrainVoice={canCreateVoiceCloneTask}
+                onSelectVoice={setSelectedVoiceId}
+                onRetrainVoice={createVoiceCloneTask}
+                onDeleteVoice={deleteClonedVoice}
+              />
+              <VoiceGroupSection
+                title="克隆音色"
+                emptyText="暂无克隆音色"
+                voices={groupedVoices.cloned}
+                selectedVoiceId={selectedVoiceId}
+                deletingVoiceId={deletingVoiceId}
+                canRetrainVoice={canCreateVoiceCloneTask}
+                onSelectVoice={setSelectedVoiceId}
+                onRetrainVoice={createVoiceCloneTask}
+                onDeleteVoice={deleteClonedVoice}
+              />
             </div>
           )}
         </section>
@@ -743,6 +795,114 @@ export default function VoicesPage() {
         onConfirm={confirmTtsResult}
         onRegenerate={() => regenerateTts()}
       />
+    </div>
+  );
+}
+
+function VoiceGroupSection({
+  title,
+  emptyText,
+  voices,
+  selectedVoiceId,
+  deletingVoiceId,
+  canRetrainVoice,
+  onSelectVoice,
+  onRetrainVoice,
+  onDeleteVoice,
+}: {
+  title: string;
+  emptyText: string;
+  voices: SerializedVoice[];
+  selectedVoiceId: string;
+  deletingVoiceId: string | null;
+  canRetrainVoice: boolean;
+  onSelectVoice: (voiceId: string) => void;
+  onRetrainVoice: () => void;
+  onDeleteVoice: (voice: SerializedVoice) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+        <span className="text-xs text-gray-500">{voices.length} 个</span>
+      </div>
+      {voices.length === 0 ? (
+        <div className="rounded-md border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-500">
+          {emptyText}
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {voices.map((voice) => {
+            const selected = selectedVoiceId === voice.id;
+            const isCloned = voice.voiceType === "cloned";
+
+            return (
+              <article
+                key={voice.id}
+                className={`rounded-md border p-4 ${
+                  selected ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelectVoice(voice.id)}
+                  className="block w-full text-left"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-gray-900">{voice.name}</div>
+                      <div className="mt-1 text-sm text-gray-500">
+                        {voice.provider} / {voice.modelId}
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
+                      {getVoiceStatusLabel(voice.status)}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-gray-500 sm:grid-cols-2">
+                    <div>
+                      授权状态
+                      <span className="ml-2 font-medium text-gray-700">
+                        {getVoiceLicenseLabel(voice.licenseStatus)}
+                      </span>
+                    </div>
+                    <div>
+                      类型
+                      <span className="ml-2 font-medium text-gray-700">{title}</span>
+                    </div>
+                  </div>
+                </button>
+                {voice.sampleUrl && (
+                  <div className="mt-3">
+                    <div className="mb-2 text-xs font-medium text-gray-500">试听</div>
+                    <audio className="w-full" src={voice.sampleUrl} controls />
+                  </div>
+                )}
+                {isCloned && (
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={onRetrainVoice}
+                      disabled={!canRetrainVoice}
+                      className="rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      重训
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteVoice(voice)}
+                      disabled={deletingVoiceId === voice.id}
+                      className="rounded-md border border-rose-200 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deletingVoiceId === voice.id ? "删除中..." : "删除"}
+                    </button>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

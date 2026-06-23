@@ -89,8 +89,8 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | 7 | 系统提取原文、钩子、节奏和卖点 | `voflow-reference-extract`, `voflow-reference-url-import` | done | 上传素材路径已完成；公开链接 metadata 解析、授权确认 API、queued workflow node、字幕结构分析、无字幕音频 reference_extract 衔接、导入审计/阻断、UI 状态确认、测试清单复核、本地运行文档和 Task 14 checkpoint 已完成；结构分析 Worker 和相关测试 | 需在最终 MVP 环境复验 |
 | 8 | 系统生成改写文案和标题候选 | `voflow-script-ai` | done | 文案改写、标题生成、风险检查测试 | 需在最终 MVP 环境复验 |
 | 9 | 系统执行 AI 法务审查，给出风险原因和替换建议 | `voflow-legal-review` | done | 法务审查 API/service 测试 | 需在最终 MVP 环境复验 |
-| 10 | 用户选择预置音色或克隆音色生成语音 | `voflow-tts`, `voflow-voice-clone` | partial | 预置音色 TTS 已完成；`voflow-voice-clone` Task 0 开发规范检查和任务执行判断已完成；Task 1 已创建 `voice_samples`、`voice_consents`、`voice_clone_jobs`，并复用已有 `voices` 主表；Task 2 已实现声音样本上传 API，复用 asset upload、限定音频格式并保存 voice_sample metadata；Task 3 已实现声音质量检测，阈值/错误码/mock 指标收口到 voice clone 常量和 helper，合格样本写入 `qualityReport`，不合格样本上传前阻断；Task 4 已实现声音授权确认，展示/提交默认授权文本，写入 `voice_consents`，并强制 `usageScope` 包含 `voice_clone` 和 `tts_generation`；Task 5 已实现本地训练任务创建，合格且已授权样本可创建 `voice_clone` workflow node 和 `voice_clone_jobs` | `voflow-voice-clone` Task 6-11 待实现 |
-| 11 | 系统使用我的数字人生成口播视频 | `voflow-video-render` | not_started | - | Spec 未开始 |
+| 10 | 用户选择预置音色或克隆音色生成语音 | `voflow-tts`, `voflow-voice-clone` | partial | 预置音色 TTS 已完成；`voflow-voice-clone` Task 0-11 已全部完成：声音样本上传复用 asset upload 并限定音频格式，质量检测阈值/错误码/mock 指标已收口，授权确认写入 `voice_consents` 且强制 `usageScope` 包含 `voice_clone` 和 `tts_generation`，合格且已授权样本可创建 `voice_clone` workflow node 和 `voice_clone_jobs`，mock/local/GPT-SoVITS/CosyVoice trainer adapter 已接入，`voice_clone` worker 可下载样本、调用 trainer、写入成功 output 或失败 `errorJson`，trainer 输出会创建 active/approved cloned voice 并关联 `voice_clone_jobs.outputVoiceId`，我的声音页面支持预置/克隆音色分区、试听、重训、删除、授权状态和训练状态展示，cloned voice 删除置为 disabled，新 TTS 不能选择 disabled voice，历史 TTS request 保留 voice 引用，Task 11 checkpoint 已补充 API 正向测试确认 active/approved cloned voice 可创建 TTS 任务 | 真实 GPT-SoVITS/CosyVoice 训练服务未在本 checkpoint 人工联调，需最终 MVP 环境复验后再升级为 done |
+| 11 | 系统使用我的数字人生成口播视频 | `voflow-video-render` | partial | Task 0 已完成后续开发规范检查，确认渲染服务配置必须复用 `local_model_services.avatar`，provider、输入校验、ffprobe 校验、artifact 写入和 API 响应需进入公共 helper/service；已确认 `avatar_render` workflow node、local model registry、artifact/storage helper、avatar/TTS 基础能力可复用 | Task 1-12 待实现；真实 avatar render provider、低清预览、高清渲染和失败重试尚未完成 |
 | 12 | 系统合成字幕、BGM、画中画、封面和最终 MP4 | `voflow-advanced-editing`, `voflow-packaging-export` | not_started | - | Spec 未开始 |
 | 13 | 系统生成各平台标题、标签、描述、话题 | `voflow-publish-assistant` | not_started | - | Spec 未开始 |
 | 14 | 用户一键发布到已授权平台，未授权或 token 过期平台给出可处理状态 | `voflow-publish-assistant` | not_started | - | Spec 未开始 |
@@ -110,14 +110,13 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 
 当前唯一开发入口：
 
-- Active Spec: `voflow-voice-clone`
-- Active Scope: 本地训练任务创建已实现
-- Active Focus: Task 6 实现本地 Voice Trainer Adapter：支持 GPT-SoVITS/CosyVoice 或 mock trainer，返回 model_id、sample_url、训练日志，失败时写入 error_json
+- Active Spec: `voflow-video-render`
+- Active Scope: 数字人渲染开发规范检查已完成
+- Active Focus: Task 1 创建渲染请求数据库迁移：创建 `avatar_render_requests`，添加 mode、crop、aspect_ratio 校验，并关联 job、node、avatar、audio artifact
 - Status: `ready_for_next_task`
 
 未完成当前游标前，不允许并行启动以下新 Spec：
 
-- `voflow-voice-clone`
 - `voflow-video-render`
 - `voflow-advanced-editing`
 - `voflow-packaging-export`
@@ -146,8 +145,8 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | `voflow-legal-review` | done | 最终 MVP 环境复验 |
 | `voflow-tts` | done | 与 voice clone 和 avatar render 联调 |
 | `voflow-self-avatar` | done | 最终 MVP 环境复验 |
-| `voflow-voice-clone` | partial | 继续 Task 6：实现本地 Voice Trainer Adapter |
-| `voflow-video-render` | not_started | 依赖 voice clone/self-avatar/workflow |
+| `voflow-voice-clone` | partial | 真实 trainer 环境复验后升级为 done |
+| `voflow-video-render` | partial | 继续 Task 1：创建渲染请求数据库迁移 |
 | `voflow-advanced-editing` | not_started | 依赖 video render |
 | `voflow-packaging-export` | not_started | 依赖 legal-review/video-render/advanced-editing |
 | `voflow-publish-assistant` | not_started | 依赖 packaging-export |
