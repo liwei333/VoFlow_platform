@@ -135,6 +135,12 @@ export type RetryAvatarRenderPreviewInput = {
   avatarRenderRequestId: string;
 };
 
+export type CreateHdAvatarRenderTaskInput = {
+  jobId: string;
+  teamId: string;
+  previewAvatarRenderRequestId: string;
+};
+
 export type AvatarRenderPreviewActionDependencies = {
   queue: Pick<WorkflowQueueEnqueuer, "enqueue">;
   createTraceId: () => string;
@@ -157,6 +163,17 @@ export type RetryAvatarRenderPreviewResult =
       success: true;
       data: {
         cancelledPreviewNode: AvatarRenderWorkflowNodeResult;
+        node: AvatarRenderWorkflowNodeResult;
+        avatarRenderRequest: AvatarRenderRequestResult;
+      };
+    }
+  | AvatarRenderFailure;
+
+export type CreateHdAvatarRenderTaskResult =
+  | {
+      success: true;
+      data: {
+        previewNode: AvatarRenderWorkflowNodeResult;
         node: AvatarRenderWorkflowNodeResult;
         avatarRenderRequest: AvatarRenderRequestResult;
       };
@@ -564,6 +581,77 @@ export async function retryAvatarRenderPreview(
 
     return {
       cancelledPreviewNode,
+      node,
+      avatarRenderRequest,
+    };
+  });
+
+  await queue.enqueue({
+    jobId: input.jobId,
+    nodeId: result.node.id,
+    nodeType: AVATAR_RENDER_NODE_TYPE,
+    version: result.node.version,
+    traceId: createTraceId(),
+  });
+
+  return {
+    success: true,
+    data: result,
+  };
+}
+
+export async function createHdAvatarRenderTask(
+  input: CreateHdAvatarRenderTaskInput,
+  dependencies: Partial<CreatePreviewAvatarRenderTaskDependencies> = {}
+): Promise<CreateHdAvatarRenderTaskResult> {
+  const { queue, createTraceId } = {
+    ...defaultCreatePreviewAvatarRenderTaskDependencies,
+    ...dependencies,
+  };
+
+  const preview = await readPreviewRenderRequest(
+    input.jobId,
+    input.teamId,
+    input.previewAvatarRenderRequestId
+  );
+  if (!preview) {
+    return avatarRenderError(AVATAR_RENDER_ERROR_CODES.renderRequestNotFound);
+  }
+
+  if (preview.node.status !== WORKFLOW_NODE_STATUS.APPROVED) {
+    return avatarRenderError(AVATAR_RENDER_ERROR_CODES.previewNotApproved);
+  }
+
+  const renderOptions = {
+    crop: preview.crop,
+    resolution: AVATAR_RENDER_DEFAULT_RESOLUTIONS.hd,
+  };
+  const aspectRatio = toApiAspectRatio(preview.aspectRatio);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const { node, avatarRenderRequest } = await createAvatarRenderRequestWithNode(tx, {
+      jobId: preview.jobId,
+      avatarId: preview.avatarId,
+      audioArtifactId: preview.audioArtifactId,
+      mode: "hd",
+      aspectRatio,
+      crop: preview.crop,
+      provider: preview.provider,
+      sourceImageUrl: preview.avatar.sourceAsset.storageUrl,
+      audioUrl: preview.audioArtifact.storageUrl,
+      renderOptions,
+    });
+
+    await tx.videoJob.update({
+      where: { id: preview.jobId },
+      data: {
+        status: "queued",
+        currentNode: AVATAR_RENDER_NODE_TYPE,
+      },
+    });
+
+    return {
+      previewNode: preview.node,
       node,
       avatarRenderRequest,
     };

@@ -28,6 +28,7 @@ export const AVATAR_RENDER_DEFAULT_FFPROBE_BIN = "ffprobe";
 export const AVATAR_RENDER_ERROR_CODES = {
   jobNotFound: "AVATAR_RENDER_JOB_NOT_FOUND",
   renderRequestNotFound: "AVATAR_RENDER_REQUEST_NOT_FOUND",
+  previewNotApproved: "AVATAR_RENDER_PREVIEW_NOT_APPROVED",
   previewNotWaitingApproval: "AVATAR_RENDER_PREVIEW_NOT_WAITING_APPROVAL",
   workerInputInvalid: "AVATAR_RENDER_WORKER_INPUT_INVALID",
   avatarNotReady: "AVATAR_NOT_READY",
@@ -47,6 +48,7 @@ export type AvatarRenderErrorCode =
 export const AVATAR_RENDER_ERROR_MESSAGES: Record<AvatarRenderErrorCode, string> = {
   [AVATAR_RENDER_ERROR_CODES.jobNotFound]: "视频任务不存在",
   [AVATAR_RENDER_ERROR_CODES.renderRequestNotFound]: "数字人渲染请求不存在",
+  [AVATAR_RENDER_ERROR_CODES.previewNotApproved]: "预览渲染尚未确认",
   [AVATAR_RENDER_ERROR_CODES.previewNotWaitingApproval]: "预览渲染不在等待确认状态",
   [AVATAR_RENDER_ERROR_CODES.workerInputInvalid]: "数字人渲染节点输入无效",
   [AVATAR_RENDER_ERROR_CODES.avatarNotReady]: "数字人不可用",

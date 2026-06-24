@@ -3,6 +3,7 @@ import { AVATAR_RENDER_DEFAULT_RESOLUTIONS } from "@/lib/avatar-render/constants
 import { prisma } from "@/lib/db";
 import {
   approveAvatarRenderPreview,
+  createHdAvatarRenderTask,
   createPreviewAvatarRenderTask,
   retryAvatarRenderPreview,
   validateAvatarRenderInput,
@@ -549,5 +550,137 @@ describe("avatar render input validation service", () => {
         traceId: "trace-avatar-preview-retry",
       },
     ]);
+  });
+
+  it("creates an hd avatar render request only from an approved preview", async () => {
+    const enqueued: unknown[] = [];
+    const preview = await createPreviewAvatarRenderTask(
+      {
+        jobId,
+        teamId,
+        avatarId,
+        audioArtifactId,
+        aspectRatio: "9:16",
+        crop: "half_body",
+      },
+      {
+        queue: { enqueue: async () => undefined },
+        createTraceId: () => "trace-preview",
+      }
+    );
+    if (!preview.success) {
+      throw new Error(preview.error.message);
+    }
+    await prisma.workflowNode.update({
+      where: { id: preview.data.node.id },
+      data: {
+        status: "approved",
+        requiresApproval: true,
+        approvedByUserId: userId,
+        approvedAt: new Date("2026-06-24T00:00:00.000Z"),
+        output: {
+          videoArtifactId: "preview-artifact-1",
+        },
+      },
+    });
+
+    const result = await createHdAvatarRenderTask(
+      {
+        jobId,
+        teamId,
+        previewAvatarRenderRequestId: preview.data.avatarRenderRequest.id,
+      },
+      {
+        queue: {
+          enqueue: async (payload) => {
+            enqueued.push(payload);
+          },
+        },
+        createTraceId: () => "trace-avatar-hd-api",
+      }
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.previewNode).toMatchObject({
+      id: preview.data.node.id,
+      status: "approved",
+      approvedByUserId: userId,
+    });
+    expect(result.success && result.data.avatarRenderRequest).toMatchObject({
+      jobId,
+      avatarId,
+      audioArtifactId,
+      mode: "hd",
+      crop: "half_body",
+      aspectRatio: "9:16",
+      provider: "mock",
+    });
+    expect(result.success && result.data.node).toMatchObject({
+      jobId,
+      nodeType: "avatar_render",
+      status: "queued",
+      version: 2,
+      input: {
+        mode: "hd",
+        avatarId,
+        audioArtifactId,
+        sourceImageUrl: "s3://voflow/team/avatar-source.png",
+        audioUrl: "s3://voflow/team/jobs/job-1/tts/audio.wav",
+        renderOptions: {
+          crop: "half_body",
+          resolution: AVATAR_RENDER_DEFAULT_RESOLUTIONS.hd,
+        },
+      },
+    });
+    expect(enqueued).toEqual([
+      {
+        jobId,
+        nodeId: result.success && result.data.node.id,
+        nodeType: "avatar_render",
+        version: 2,
+        traceId: "trace-avatar-hd-api",
+      },
+    ]);
+  });
+
+  it("rejects hd render creation before the preview is approved", async () => {
+    const preview = await createPreviewAvatarRenderTask(
+      {
+        jobId,
+        teamId,
+        avatarId,
+        audioArtifactId,
+        aspectRatio: "9:16",
+        crop: "half_body",
+      },
+      {
+        queue: { enqueue: async () => undefined },
+        createTraceId: () => "trace-preview",
+      }
+    );
+    if (!preview.success) {
+      throw new Error(preview.error.message);
+    }
+    await prisma.workflowNode.update({
+      where: { id: preview.data.node.id },
+      data: {
+        status: "waiting_approval",
+        requiresApproval: true,
+      },
+    });
+
+    const result = await createHdAvatarRenderTask({
+      jobId,
+      teamId,
+      previewAvatarRenderRequestId: preview.data.avatarRenderRequest.id,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "AVATAR_RENDER_PREVIEW_NOT_APPROVED",
+        message: "预览渲染尚未确认",
+      },
+    });
   });
 });

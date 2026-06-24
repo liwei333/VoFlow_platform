@@ -56,13 +56,13 @@
   - 用户不满意时允许重试 preview
   - _Requirements: US-2, US-3_
 
-- [ ] 8. 实现高清渲染 API
+- [x] 8. 实现高清渲染 API
   - 只允许在 preview approved 后调用
   - 创建 hd 版本请求
   - 投递高清渲染任务
   - _Requirements: US-3_
 
-- [ ] 9. 接入真实模型服务配置
+- [x] 9. 接入真实模型服务配置
   - 从 `local_model_services` 读取 `avatar` 服务的 `baseUrl` 和 `status`
   - 不在渲染模块重新读取或定义 `AVATAR_BASE_URL`
   - 实现请求超时和错误码映射
@@ -545,3 +545,115 @@
 - 是否满足对应 Acceptance Criteria：满足 US-2 的低清预览确认后进入高清渲染队列基础；满足 US-3 的预览不满意可重试且保留历史版本的基础。
 - 是否允许勾选：允许勾选 Task 7，不允许勾选 Task 8-12。
 - MVP 状态矩阵是否需要同步更新：需要，`voflow-video-render` 仍为 `partial`，下一步为 Task 8 实现高清渲染 API。
+
+### Task 8: 高清渲染 API
+
+### 任务
+- Spec: `voflow-video-render`
+- Task: 8
+- Requirements: US-3
+
+### 修改文件
+- `src/lib/avatar-render/constants.ts`
+- `src/services/avatarRenderService.ts`
+- `src/app/api/video-jobs/[jobId]/avatar-render/hd/route.ts`
+- `tests/avatar-render-service.test.ts`
+- `tests/avatar-render-api.test.ts`
+- `.kiro/specs/voflow-video-render/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：新增 `POST /api/video-jobs/{jobId}/avatar-render/hd`，body 使用 `previewAvatarRenderRequestId` 指定已确认的预览请求。
+- 本次完成：新增 `createHdAvatarRenderTask()`，只允许从当前 team/job 下 `mode=preview` 且 workflow node `status=approved` 的 preview request 创建高清任务。
+- 本次完成：未确认 preview 会返回 `AVATAR_RENDER_PREVIEW_NOT_APPROVED`，错误码和文案收口在 `src/lib/avatar-render/constants.ts`。
+- 本次完成：高清任务创建复用 `createAvatarRenderRequestWithNode()`，创建 `mode=hd` 的 `avatar_render_requests`、新的 queued `avatar_render` workflow node，并投递队列。
+- 本次完成：高清 node input 复用 preview 的 avatar/audio/source/crop/aspectRatio，`renderOptions.resolution` 从 `AVATAR_RENDER_DEFAULT_RESOLUTIONS.hd` 读取。
+- 本次完成：route 只负责鉴权、JSON/Zod 校验、service 调用和统一错误映射，不查询 avatar/audio/project，也不读取 provider/env。
+- 明确未完成：本轮未接入真实 MuseTalk/SadTalker provider、未实现 render result 查询 API、未实现数字人渲染 UI、未做最终 checkpoint。
+- mock/provider 边界：高清 API 只创建并投递 hd workflow node；实际渲染仍由 Task 5 Worker 和 mock/local provider 抽象执行，真实模型环境仍待 Task 9/Checkpoint 复验。
+
+### TDD 记录
+- RED：先扩展 `tests/avatar-render-service.test.ts` 和 `tests/avatar-render-api.test.ts`，执行 `npm run test:run -- tests/avatar-render-api.test.ts tests/avatar-render-service.test.ts`，失败点为 hd route 模块缺失、`createHdAvatarRenderTask` 未实现。
+- GREEN：补充 constants、service 和 hd route 后重新运行同一测试，2 files / 17 tests passed。
+
+### 硬编码检查
+- 是否新增运行时硬编码：新增 `AVATAR_RENDER_PREVIEW_NOT_APPROVED` 错误码和文案已集中在 `src/lib/avatar-render/constants.ts`。
+- route 是否散写分辨率：否，`/hd` route 不设置 `"1080p"`，service 使用 `AVATAR_RENDER_DEFAULT_RESOLUTIONS.hd`。
+- route 是否直接读取 provider/env：否，`/hd` route 不读取 `AVATAR_BASE_URL`、`process.env` 或 local model 配置。
+- 是否散写 artifact 路径：否，本轮只创建 workflow node/request，artifact 写入仍由 Worker 通过 `uploadJobArtifact()` 和 `writeWorkflowArtifact()` 完成。
+
+### 公共化检查
+- 新增公共 service 方法：`createHdAvatarRenderTask()`。
+- 新增 route：`POST /api/video-jobs/{jobId}/avatar-render/hd`。
+- 复用的公共模块：`src/lib/avatar-render/constants.ts`、`src/lib/workflow/constants.ts`、`src/lib/workflow/trace.ts`、统一 API response、`requireAuth`、workflow queue。
+- 复用关系：高清 API 与预览确认流程共用 `readPreviewRenderRequest()` 和 `createAvatarRenderRequestWithNode()`，保持 request/node input 结构一致，避免 Worker 解析分叉。
+- 状态边界：Task 8 只允许从 `approved` preview 创建 hd；`waiting_approval` preview 必须先走确认流程。
+
+### 验证命令
+- `npm run test:run -- tests/avatar-render-api.test.ts tests/avatar-render-service.test.ts`: RED 阶段失败，确认 hd route 和 service 方法缺失；GREEN 阶段通过，2 files / 17 tests。
+- `npm run test:run -- tests/avatar-render-api.test.ts tests/avatar-render-service.test.ts tests/avatar-render-worker-service.test.ts tests/avatar-render-output-validation.test.ts tests/avatar-render-provider-service.test.ts tests/avatar-render-schema.test.ts tests/workflow-worker-artifact-service.test.ts tests/workflow-constants.test.ts tests/local-model-service.test.ts tests/local-model-config.test.ts tests/tts-worker-service.test.ts tests/tts-provider-service.test.ts tests/tts-result-service.test.ts tests/tts-service.test.ts`: 通过，14 files / 75 tests。
+- `rg -n '720p|1080p|AVATAR_RENDER_DEFAULT_RESOLUTIONS|AVATAR_RENDER_PREVIEW_NOT_APPROVED|AVATAR_RENDER_PREVIEW_NOT_WAITING_APPROVAL|avatar_render|uploadJobArtifact|AVATAR_BASE_URL|process\\.env' src/services/avatarRenderService.ts 'src/app/api/video-jobs/[jobId]/avatar-render/hd/route.ts' src/lib/avatar-render tests/avatar-render-api.test.ts tests/avatar-render-service.test.ts`: 通过，确认 `/hd` route 未散写分辨率、provider 地址或 env 读取。
+- `npx prisma validate --schema prisma/schema.prisma`: 通过。
+- `npm run lint`: 通过。
+- `npm run build`: 通过，构建产物包含 `/api/video-jobs/[jobId]/avatar-render/hd`。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 8。
+- 是否满足对应 Acceptance Criteria：满足 US-3 的 preview approved 后创建高清渲染任务、投递高清 workflow node 的基础；高清成功保存 `avatar_video` artifact 仍由 Task 5 Worker 执行。
+- 是否允许勾选：允许勾选 Task 8，不允许勾选 Task 9-12。
+- MVP 状态矩阵是否需要同步更新：需要，`voflow-video-render` 仍为 `partial`，下一步为 Task 9 接入真实模型服务配置。
+
+### Task 9: 真实模型服务配置接入
+
+### 任务
+- Spec: `voflow-video-render`
+- Task: 9
+- Requirements: US-2、US-3
+
+### 修改文件
+- `src/services/avatarRenderProviderService.ts`
+- `tests/avatar-render-provider-service.test.ts`
+- `tests/avatar-render-worker-service.test.ts`
+- `.kiro/specs/voflow-video-render/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：复核并补齐 Avatar Render Worker 的真实模型配置接入验收，Worker 默认 reader 读取 `local_model_services` 中 `serviceType=avatar` 的 `baseUrl`、`status`、`modelName`。
+- 本次完成：补充 worker 测试，确认非 mock/local provider 路径会把 registry 中的 avatar service config 传给 `createAvatarRenderProvider(provider, localService)`。
+- 本次完成：补充 worker 测试，确认 mock provider fallback 不读取本地 avatar registry，避免测试和本地 mock 流程依赖真实服务配置。
+- 本次完成：补充 local provider 超时映射，HTTP `408` / `504` 统一映射为 `AVATAR_PROVIDER_TIMEOUT`。
+- 本次完成：补充 AbortError 请求超时测试，继续映射为 `AVATAR_PROVIDER_TIMEOUT`。
+- 本次完成：保持非 2xx 且非 timeout 状态映射为 `AVATAR_PROVIDER_UNAVAILABLE`；缺失 `baseUrl` 或 `status !== online` 仍映射为 `AVATAR_PROVIDER_UNAVAILABLE`。
+- 明确未完成：本轮未启动真实 MuseTalk/SadTalker 服务做人工联调，未实现数字人渲染 UI，未实现最终 checkpoint。
+- mock/provider 边界：mock provider 仍作为自动化测试和本地无模型环境 fallback；不能把 mock 输出视作真实口型渲染能力完成。
+
+### TDD 记录
+- RED：先扩展 `tests/avatar-render-provider-service.test.ts` 和 `tests/avatar-render-worker-service.test.ts`，执行 `npm run test:run -- tests/avatar-render-provider-service.test.ts tests/avatar-render-worker-service.test.ts`，失败点为 HTTP 504 被错误映射为 `AVATAR_PROVIDER_UNAVAILABLE`。
+- GREEN：补充 `mapLocalAvatarProviderHttpStatus()`，将 `408` / `504` 映射为 `AVATAR_PROVIDER_TIMEOUT` 后重新运行同一测试，2 files / 11 tests passed。
+
+### 硬编码检查
+- 是否新增运行时硬编码：否，provider path、timeout、provider 名称、错误码继续收口在 `src/lib/avatar-render/constants.ts`。
+- 是否直接读取 `AVATAR_BASE_URL`：否，`avatarRenderProviderService` 和 `avatarRenderWorkerService` 未读取 `AVATAR_BASE_URL` 或 local-model env definition。
+- 是否直接读取 `process.env`：否，本轮涉及的 provider/worker 未直接读取 env；`process.env` 仅存在于既有 ffprobe helper 的 `FFPROBE_WORKER` fallback。
+- 服务配置来源：默认 worker reader 查询 `local_model_services.serviceType = "avatar"`，并只选择 `baseUrl`、`status`、`modelName`。
+- mock fallback：`provider === "mock"` 时不读取 local avatar service，直接使用 `createMockAvatarRenderProvider()`。
+
+### 公共化检查
+- 复用的公共模块：`src/lib/avatar-render/constants.ts`、`src/lib/avatar-render/types.ts`、`src/services/avatarRenderProviderService.ts`、`src/services/avatarRenderWorkerService.ts`。
+- 新增公共 helper：`mapLocalAvatarProviderHttpStatus()`，集中处理 local avatar provider HTTP 状态到 avatar-render 错误码的映射。
+- provider 边界：`createLocalAvatarRenderProvider(service, transport)` 只消费调用方注入的 `LocalAvatarRenderServiceConfig`，仍不维护第二套服务地址或状态来源。
+- Worker 边界：Worker 只负责读取 registry 并把归一化 service config 注入 provider factory；具体 HTTP path、timeout、错误码映射在 provider service 中处理。
+
+### 验证命令
+- `npm run test:run -- tests/avatar-render-provider-service.test.ts tests/avatar-render-worker-service.test.ts`: RED 阶段失败，确认 HTTP 504 超时映射缺口；GREEN 阶段通过，2 files / 11 tests。
+- `npm run test:run -- tests/avatar-render-api.test.ts tests/avatar-render-service.test.ts tests/avatar-render-worker-service.test.ts tests/avatar-render-output-validation.test.ts tests/avatar-render-provider-service.test.ts tests/avatar-render-schema.test.ts tests/workflow-worker-artifact-service.test.ts tests/workflow-constants.test.ts tests/local-model-service.test.ts tests/local-model-config.test.ts tests/tts-worker-service.test.ts tests/tts-provider-service.test.ts tests/tts-result-service.test.ts tests/tts-service.test.ts`: 通过，14 files / 78 tests。
+- `rg -n 'AVATAR_BASE_URL|process\\.env|baseUrlEnv|local_model_services|serviceType: "avatar"|AVATAR_PROVIDER_TIMEOUT|AVATAR_PROVIDER_UNAVAILABLE|AVATAR_RENDER_LOCAL_TIMEOUT_MS|AVATAR_RENDER_LOCAL_RENDER_PATH|createLocalAvatarRenderProvider|createAvatarRenderProvider|AVATAR_RENDER_MOCK_PROVIDER' src/services/avatarRenderProviderService.ts src/services/avatarRenderWorkerService.ts src/lib/avatar-render tests/avatar-render-provider-service.test.ts tests/avatar-render-worker-service.test.ts`: 通过，确认默认 worker reader 查询 avatar registry，provider/worker 未直接读取 `AVATAR_BASE_URL`，timeout/path/error 仍集中在 avatar-render 模块。
+- `npx prisma validate --schema prisma/schema.prisma`: 通过。
+- `npm run lint`: 通过。
+- `npm run build`: 通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 9。
+- 是否满足对应 Acceptance Criteria：满足 US-2 中 avatar_render 节点从 `local_model_services` 读取 `avatar` 服务配置的要求；满足 US-3 中本地 avatar provider 超时/不可用错误码映射和 mock fallback 自动化验收。
+- 是否允许勾选：允许勾选 Task 9，不允许勾选 Task 10-12。
+- MVP 状态矩阵是否需要同步更新：需要，`voflow-video-render` 仍为 `partial`，下一步为 Task 10 实现数字人选择和渲染 UI。

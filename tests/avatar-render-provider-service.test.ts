@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AVATAR_RENDER_CROPS,
   AVATAR_RENDER_DEFAULT_RESOLUTIONS,
+  AVATAR_RENDER_ERROR_CODES,
   AVATAR_RENDER_LOCAL_RENDER_PATH,
   AVATAR_RENDER_MODES,
   AVATAR_RENDER_MOCK_PROVIDER,
@@ -149,6 +150,42 @@ describe("Avatar render provider service", () => {
 
     await expect(provider.renderAvatarVideo(renderPayload)).rejects.toMatchObject({
       code: "AVATAR_PROVIDER_UNAVAILABLE",
+    } satisfies Partial<AvatarRenderProviderError>);
+  });
+
+  it("maps local avatar provider timeout responses to the timeout error code", async () => {
+    const transport = vi.fn(async () => new Response("timeout", { status: 504 }));
+    const provider = createLocalAvatarRenderProvider(
+      {
+        baseUrl: "http://localhost:7012",
+        status: "online",
+        modelName: "musetalk",
+      },
+      transport
+    );
+
+    await expect(provider.renderAvatarVideo(renderPayload)).rejects.toMatchObject({
+      code: AVATAR_RENDER_ERROR_CODES.providerTimeout,
+    } satisfies Partial<AvatarRenderProviderError>);
+  });
+
+  it("maps aborted local avatar provider requests to the timeout error code", async () => {
+    const abortError = new Error("aborted");
+    abortError.name = "AbortError";
+    const transport = vi.fn(async () => {
+      throw abortError;
+    });
+    const provider = createLocalAvatarRenderProvider(
+      {
+        baseUrl: "http://localhost:7012",
+        status: "online",
+        modelName: "musetalk",
+      },
+      transport
+    );
+
+    await expect(provider.renderAvatarVideo(renderPayload)).rejects.toMatchObject({
+      code: AVATAR_RENDER_ERROR_CODES.providerTimeout,
     } satisfies Partial<AvatarRenderProviderError>);
   });
 });

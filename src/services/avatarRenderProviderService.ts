@@ -115,7 +115,7 @@ export function createLocalAvatarRenderProvider(
         );
 
         if (!response.ok) {
-          throw avatarRenderProviderError(AVATAR_RENDER_ERROR_CODES.providerUnavailable);
+          throw avatarRenderProviderError(mapLocalAvatarProviderHttpStatus(response.status));
         }
 
         return normalizeLocalAvatarRenderResult(await response.json(), payload);
@@ -218,6 +218,14 @@ function sanitizeFileName(value: string): string {
 
 function avatarRenderProviderError(code: AvatarRenderErrorCode) {
   return new AvatarRenderProviderError(code);
+}
+
+function mapLocalAvatarProviderHttpStatus(status: number): AvatarRenderErrorCode {
+  if (status === 408 || status === 504) {
+    return AVATAR_RENDER_ERROR_CODES.providerTimeout;
+  }
+
+  return AVATAR_RENDER_ERROR_CODES.providerUnavailable;
 }
 
 const MOCK_MP4_BASE64 =

@@ -90,7 +90,7 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | 8 | 系统生成改写文案和标题候选 | `voflow-script-ai` | done | 文案改写、标题生成、风险检查测试 | 需在最终 MVP 环境复验 |
 | 9 | 系统执行 AI 法务审查，给出风险原因和替换建议 | `voflow-legal-review` | done | 法务审查 API/service 测试 | 需在最终 MVP 环境复验 |
 | 10 | 用户选择预置音色或克隆音色生成语音 | `voflow-tts`, `voflow-voice-clone` | partial | 预置音色 TTS 已完成；`voflow-voice-clone` Task 0-11 已全部完成：声音样本上传复用 asset upload 并限定音频格式，质量检测阈值/错误码/mock 指标已收口，授权确认写入 `voice_consents` 且强制 `usageScope` 包含 `voice_clone` 和 `tts_generation`，合格且已授权样本可创建 `voice_clone` workflow node 和 `voice_clone_jobs`，mock/local/GPT-SoVITS/CosyVoice trainer adapter 已接入，`voice_clone` worker 可下载样本、调用 trainer、写入成功 output 或失败 `errorJson`，trainer 输出会创建 active/approved cloned voice 并关联 `voice_clone_jobs.outputVoiceId`，我的声音页面支持预置/克隆音色分区、试听、重训、删除、授权状态和训练状态展示，cloned voice 删除置为 disabled，新 TTS 不能选择 disabled voice，历史 TTS request 保留 voice 引用，Task 11 checkpoint 已补充 API 正向测试确认 active/approved cloned voice 可创建 TTS 任务 | 真实 GPT-SoVITS/CosyVoice 训练服务未在本 checkpoint 人工联调，需最终 MVP 环境复验后再升级为 done |
-| 11 | 系统使用我的数字人生成口播视频 | `voflow-video-render` | partial | Task 0 已完成后续开发规范检查，确认渲染服务配置必须复用 `local_model_services.avatar`；Task 1 已新增 `avatar_render_requests` 数据库迁移、`AvatarRenderMode`/`AvatarRenderCrop` 枚举、`AvatarRenderRequest` Prisma model，并关联 job、node、avatar、audio artifact；Task 2 已新增 avatar render 常量/类型、`AvatarRenderProvider.renderAvatarVideo(payload)` 接口、mock MP4 provider 和 local provider adapter，确认未直接读取 `AVATAR_BASE_URL`；Task 3 已新增 `validateAvatarRenderInput()`，校验 avatar ready、license approved、succeeded TTS audio artifact 和 aspectRatio 与项目一致，错误码收口到 avatar-render constants；Task 4 已新增 `POST /api/video-jobs/{jobId}/avatar-render/preview`，复用输入校验创建 preview `avatar_render_requests`、投递 `avatar_render` workflow node，并通过 `AVATAR_RENDER_DEFAULT_RESOLUTIONS.preview` 集中设置预览分辨率；Task 5 已新增 `avatar_render` worker，下载 source image/audio，读取 `local_model_services.avatar` 后调用 provider，复用 `uploadJobArtifact()` 上传并通过 `writeWorkflowArtifact()` 写入 `avatar_video` artifact，成功回写 `providerRequestId`，preview 输出进入 `waiting_approval`；Task 6 已新增 avatar render 输出校验 helper，上传前校验文件大小、ffprobe duration 和 video stream，invalid output 统一返回 `AVATAR_RENDER_INVALID_OUTPUT`；Task 7 已新增 preview confirm/retry API 和 `approveAvatarRenderPreview()` / `retryAvatarRenderPreview()`，确认后将 preview node 标记 `approved` 并创建 `mode=hd` request/node，重试时取消原 preview node 并创建新 preview request/node；schema/provider/service/API/worker/output-validation focused tests、相关 workflow/local-model/avatar/TTS tests、lint、build 通过 | Task 8-12 待实现；高清渲染 API、真实 provider 接入、UI 和最终 checkpoint 尚未完成 |
+| 11 | 系统使用我的数字人生成口播视频 | `voflow-video-render` | partial | Task 0 已完成后续开发规范检查，确认渲染服务配置必须复用 `local_model_services.avatar`；Task 1 已新增 `avatar_render_requests` 数据库迁移、`AvatarRenderMode`/`AvatarRenderCrop` 枚举、`AvatarRenderRequest` Prisma model，并关联 job、node、avatar、audio artifact；Task 2 已新增 avatar render 常量/类型、`AvatarRenderProvider.renderAvatarVideo(payload)` 接口、mock MP4 provider 和 local provider adapter，确认未直接读取 `AVATAR_BASE_URL`；Task 3 已新增 `validateAvatarRenderInput()`，校验 avatar ready、license approved、succeeded TTS audio artifact 和 aspectRatio 与项目一致，错误码收口到 avatar-render constants；Task 4 已新增 `POST /api/video-jobs/{jobId}/avatar-render/preview`，复用输入校验创建 preview `avatar_render_requests`、投递 `avatar_render` workflow node，并通过 `AVATAR_RENDER_DEFAULT_RESOLUTIONS.preview` 集中设置预览分辨率；Task 5 已新增 `avatar_render` worker，下载 source image/audio，读取 `local_model_services.avatar` 后调用 provider，复用 `uploadJobArtifact()` 上传并通过 `writeWorkflowArtifact()` 写入 `avatar_video` artifact，成功回写 `providerRequestId`，preview 输出进入 `waiting_approval`；Task 6 已新增 avatar render 输出校验 helper，上传前校验文件大小、ffprobe duration 和 video stream，invalid output 统一返回 `AVATAR_RENDER_INVALID_OUTPUT`；Task 7 已新增 preview confirm/retry API 和 `approveAvatarRenderPreview()` / `retryAvatarRenderPreview()`，确认后将 preview node 标记 `approved` 并创建 `mode=hd` request/node，重试时取消原 preview node 并创建新 preview request/node；Task 8 已新增 `POST /api/video-jobs/{jobId}/avatar-render/hd` 和 `createHdAvatarRenderTask()`，只允许从 `approved` preview request 创建 `mode=hd` request/node 并投递高清渲染任务；Task 9 已补齐真实模型服务配置接入验收，确认 Worker 默认读取 `local_model_services.avatar` 的 `baseUrl`/`status`/`modelName`，local provider 408/504/AbortError 映射 `AVATAR_PROVIDER_TIMEOUT`，其他不可用映射 `AVATAR_PROVIDER_UNAVAILABLE`，mock fallback 不读取 registry；schema/provider/service/API/worker/output-validation focused tests、相关 workflow/local-model/avatar/TTS tests、lint、build 通过 | Task 10-12 待实现；数字人渲染 UI 和最终 checkpoint 尚未完成，真实 MuseTalk/SadTalker 服务仍需最终环境人工复验 |
 | 12 | 系统合成字幕、BGM、画中画、封面和最终 MP4 | `voflow-advanced-editing`, `voflow-packaging-export` | not_started | - | Spec 未开始 |
 | 13 | 系统生成各平台标题、标签、描述、话题 | `voflow-publish-assistant` | not_started | - | Spec 未开始 |
 | 14 | 用户一键发布到已授权平台，未授权或 token 过期平台给出可处理状态 | `voflow-publish-assistant` | not_started | - | Spec 未开始 |
@@ -111,8 +111,8 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 当前唯一开发入口：
 
 - Active Spec: `voflow-video-render`
-- Active Scope: 预览确认流程已完成
-- Active Focus: Task 8 实现高清渲染 API：只允许在 preview approved 后调用，创建 hd 版本请求并投递高清渲染任务
+- Active Scope: 真实模型服务配置接入验收已完成
+- Active Focus: Task 10 实现数字人选择和渲染 UI：展示我的数字人列表、画面比例和裁剪选项、预览播放器和确认按钮
 - Status: `ready_for_next_task`
 
 未完成当前游标前，不允许并行启动以下新 Spec：
@@ -146,7 +146,7 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | `voflow-tts` | done | 与 voice clone 和 avatar render 联调 |
 | `voflow-self-avatar` | done | 最终 MVP 环境复验 |
 | `voflow-voice-clone` | partial | 真实 trainer 环境复验后升级为 done |
-| `voflow-video-render` | partial | 继续 Task 8：实现高清渲染 API |
+| `voflow-video-render` | partial | 继续 Task 10：实现数字人选择和渲染 UI |
 | `voflow-advanced-editing` | not_started | 依赖 video render |
 | `voflow-packaging-export` | not_started | 依赖 legal-review/video-render/advanced-editing |
 | `voflow-publish-assistant` | not_started | 依赖 packaging-export |

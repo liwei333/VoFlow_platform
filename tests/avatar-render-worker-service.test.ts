@@ -287,10 +287,14 @@ describe("Avatar render workflow worker", () => {
       },
     }));
     const providerFactory = vi.fn(() => ({ renderAvatarVideo }));
+    const readLocalAvatarService = vi.fn(async () => {
+      throw new Error("mock provider should not read local avatar registry");
+    });
 
     const handler = createAvatarRenderWorkflowNodeHandler({
       storage: { downloadObject },
       providerFactory,
+      readLocalAvatarService,
       validateOutput,
       uploadArtifact,
       writeArtifact,
@@ -311,6 +315,7 @@ describe("Avatar render workflow worker", () => {
     expect(downloadObject).toHaveBeenNthCalledWith(1, "voflow/team/assets/avatar-source.png");
     expect(downloadObject).toHaveBeenNthCalledWith(2, "voflow/team/jobs/job-1/tts/audio.wav");
     expect(providerFactory).toHaveBeenCalledWith(AVATAR_RENDER_MOCK_PROVIDER, undefined);
+    expect(readLocalAvatarService).not.toHaveBeenCalled();
     expect(renderAvatarVideo).toHaveBeenCalledWith(
       expect.objectContaining({
         requestId: avatarRenderRequestId,
@@ -436,6 +441,92 @@ describe("Avatar render workflow worker", () => {
     ).rejects.toMatchObject({
       code: "AVATAR_PROVIDER_UNAVAILABLE",
     });
+  });
+
+  it("reads registered local avatar service config for local provider requests", async () => {
+    await prisma.avatarRenderRequest.update({
+      where: { id: avatarRenderRequestId },
+      data: { provider: "local" },
+    });
+    const localAvatarService = {
+      baseUrl: "http://localhost:7012",
+      status: "online",
+      modelName: "musetalk",
+    };
+    const sourceImage = Buffer.from("avatar image");
+    const audio = Buffer.from("tts audio");
+    const outputVideo = Buffer.alloc(AVATAR_RENDER_MIN_OUTPUT_BYTES + 1, 1);
+    const renderAvatarVideo = vi.fn<AvatarRenderProvider["renderAvatarVideo"]>(async (payload) => ({
+      provider: "local",
+      videoPath: "/tmp/avatar-render/local-output.mp4",
+      durationMs: 1200,
+      resolution: AVATAR_RENDER_DEFAULT_RESOLUTIONS.preview,
+      model: "musetalk",
+      providerRequestId: "local-provider-request-1",
+      metadata: {
+        mode: payload.mode,
+        crop: payload.renderOptions.crop,
+        aspectRatio: payload.aspectRatio,
+        contentType: AVATAR_RENDER_VIDEO_CONTENT_TYPE,
+        fileExtension: AVATAR_RENDER_VIDEO_EXTENSION,
+      },
+    }));
+    const providerFactory = vi.fn(() => ({ renderAvatarVideo }));
+    const readLocalAvatarService = vi.fn(async () => localAvatarService);
+
+    const handler = createAvatarRenderWorkflowNodeHandler({
+      storage: {
+        downloadObject: async (storageUrl) =>
+          storageUrl.endsWith("avatar-source.png") ? sourceImage : audio,
+      },
+      providerFactory,
+      readLocalAvatarService,
+      validateOutput: async () => ({
+        videoBuffer: outputVideo,
+        metadata: {
+          sizeBytes: outputVideo.length,
+          durationMs: 1200,
+          expectedDurationMs: 1200,
+          videoStreamCount: 1,
+          codecName: "h264",
+          contentType: AVATAR_RENDER_VIDEO_CONTENT_TYPE,
+          fileExtension: AVATAR_RENDER_VIDEO_EXTENSION,
+        },
+      }),
+      uploadArtifact: async () => "voflow/team/jobs/job-1/avatar_render/local-render.mp4",
+      writeArtifact: async (data) =>
+        prisma.artifact.create({
+          data: {
+            jobId: data.jobId,
+            nodeId: data.nodeId,
+            type: data.type,
+            storageUrl: data.storageUrl,
+            metadata: data.metadata as never,
+          },
+        }),
+    });
+
+    await handler({
+      payload: {
+        jobId,
+        nodeId: avatarRenderNodeId,
+        nodeType: AVATAR_RENDER_NODE_TYPE,
+        version: 1,
+        traceId: "trace-avatar-render-worker",
+      },
+      input: avatarRenderNodeInput,
+    });
+
+    expect(readLocalAvatarService).toHaveBeenCalledTimes(1);
+    expect(providerFactory).toHaveBeenCalledWith("local", localAvatarService);
+    expect(renderAvatarVideo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: avatarRenderRequestId,
+        mode: "preview",
+        sourceImage,
+        audio,
+      })
+    );
   });
 
   it("rejects invalid provider output before upload and artifact writes", async () => {

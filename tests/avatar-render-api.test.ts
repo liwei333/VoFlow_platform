@@ -3,6 +3,8 @@ import { NextRequest } from "next/server";
 import { AVATAR_RENDER_DEFAULT_RESOLUTIONS } from "@/lib/avatar-render/constants";
 import { createSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { GET as listAvatarRenderResults } from "@/app/api/video-jobs/[jobId]/avatar-render/route";
+import { POST as createAvatarRenderHd } from "@/app/api/video-jobs/[jobId]/avatar-render/hd/route";
 import { POST as createAvatarRenderPreview } from "@/app/api/video-jobs/[jobId]/avatar-render/preview/route";
 import { POST as confirmAvatarRenderPreview } from "@/app/api/video-jobs/[jobId]/avatar-render/preview/[avatarRenderRequestId]/confirm/route";
 import { POST as retryAvatarRenderPreviewRoute } from "@/app/api/video-jobs/[jobId]/avatar-render/preview/[avatarRenderRequestId]/retry/route";
@@ -422,6 +424,184 @@ describe("Avatar render preview API", () => {
     });
   });
 
+  it("creates an hd render from an approved preview through the hd API", async () => {
+    const previewResponse = await createAvatarRenderPreview(
+      await createRequest({
+        avatarId,
+        audioArtifactId,
+        aspectRatio: "9:16",
+        crop: "half_body",
+      }),
+      {
+        params: Promise.resolve({ jobId }),
+      }
+    );
+    const previewBody = await previewResponse.json();
+    const previewAvatarRenderRequestId = previewBody.data.avatarRenderRequest.id as string;
+    const previewNodeId = previewBody.data.node.id as string;
+    await prisma.workflowNode.update({
+      where: { id: previewNodeId },
+      data: {
+        status: "approved",
+        requiresApproval: true,
+        approvedByUserId: userId,
+        approvedAt: new Date("2026-06-24T00:00:00.000Z"),
+      },
+    });
+
+    const response = await createAvatarRenderHd(
+      await createHdRequest({
+        previewAvatarRenderRequestId,
+      }),
+      {
+        params: Promise.resolve({ jobId }),
+      }
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      code: "SUCCESS",
+      data: {
+        previewNode: {
+          id: previewNodeId,
+          status: "approved",
+          approvedByUserId: userId,
+        },
+        avatarRenderRequest: {
+          mode: "hd",
+          avatarId,
+          audioArtifactId,
+          crop: "half_body",
+          aspectRatio: "9:16",
+        },
+        node: {
+          nodeType: "avatar_render",
+          status: "queued",
+          input: {
+            mode: "hd",
+            renderOptions: {
+              resolution: AVATAR_RENDER_DEFAULT_RESOLUTIONS.hd,
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it("rejects hd API requests when the preview is not approved", async () => {
+    const previewResponse = await createAvatarRenderPreview(
+      await createRequest({
+        avatarId,
+        audioArtifactId,
+        aspectRatio: "9:16",
+        crop: "half_body",
+      }),
+      {
+        params: Promise.resolve({ jobId }),
+      }
+    );
+    const previewBody = await previewResponse.json();
+    const previewAvatarRenderRequestId = previewBody.data.avatarRenderRequest.id as string;
+
+    const response = await createAvatarRenderHd(
+      await createHdRequest({
+        previewAvatarRenderRequestId,
+      }),
+      {
+        params: Promise.resolve({ jobId }),
+      }
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "AVATAR_RENDER_PREVIEW_NOT_APPROVED",
+      message: "预览渲染尚未确认",
+    });
+  });
+
+  it("lists avatar render requests with preview video access URLs", async () => {
+    const previewResponse = await createAvatarRenderPreview(
+      await createRequest({
+        avatarId,
+        audioArtifactId,
+        aspectRatio: "9:16",
+        crop: "half_body",
+      }),
+      {
+        params: Promise.resolve({ jobId }),
+      }
+    );
+    const previewBody = await previewResponse.json();
+    const avatarRenderRequestId = previewBody.data.avatarRenderRequest.id as string;
+    const previewNodeId = previewBody.data.node.id as string;
+    await prisma.workflowNode.update({
+      where: { id: previewNodeId },
+      data: {
+        status: "waiting_approval",
+        requiresApproval: true,
+        output: {
+          videoArtifactId: "preview-artifact-1",
+        },
+      },
+    });
+    await prisma.artifact.create({
+      data: {
+        jobId,
+        nodeId: previewNodeId,
+        type: "avatar_video",
+        storageUrl: "voflow/team/jobs/job-1/avatar_render/preview.mp4",
+        metadata: {
+          durationMs: 1800,
+          resolution: AVATAR_RENDER_DEFAULT_RESOLUTIONS.preview,
+        },
+      },
+    });
+
+    const response = await listAvatarRenderResults(await createListRequest(), {
+      params: Promise.resolve({ jobId }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      code: "SUCCESS",
+      data: {
+        results: [
+          {
+            id: avatarRenderRequestId,
+            jobId,
+            avatarId,
+            audioArtifactId,
+            mode: "preview",
+            aspectRatio: "9:16",
+            crop: "half_body",
+            provider: "mock",
+            node: {
+              id: previewNodeId,
+              status: "waiting_approval",
+              version: 1,
+              requiresApproval: true,
+            },
+            avatar: {
+              id: avatarId,
+              name: "Ready Avatar",
+            },
+            videoArtifact: {
+              type: "avatar_video",
+              storageUrl: "voflow/team/jobs/job-1/avatar_render/preview.mp4",
+              accessUrl: expect.any(String),
+              metadata: {
+                durationMs: 1800,
+                resolution: AVATAR_RENDER_DEFAULT_RESOLUTIONS.preview,
+              },
+            },
+          },
+        ],
+      },
+    });
+  });
+
   async function createRequest(body: unknown): Promise<NextRequest> {
     const token = await createSessionToken({
       userId,
@@ -457,5 +637,44 @@ describe("Avatar render preview API", () => {
         cookie: `session=${token}`,
       },
     });
+  }
+
+  async function createHdRequest(body: unknown): Promise<NextRequest> {
+    const token = await createSessionToken({
+      userId,
+      teamId,
+      email: "avatar-render-api@example.com",
+      name: "Avatar Render API User",
+    });
+
+    return new NextRequest(
+      `http://localhost:3000/api/video-jobs/${jobId}/avatar-render/hd`,
+      {
+        method: "POST",
+        headers: {
+          cookie: `session=${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }
+    );
+  }
+
+  async function createListRequest(): Promise<NextRequest> {
+    const token = await createSessionToken({
+      userId,
+      teamId,
+      email: "avatar-render-api@example.com",
+      name: "Avatar Render API User",
+    });
+
+    return new NextRequest(
+      `http://localhost:3000/api/video-jobs/${jobId}/avatar-render`,
+      {
+        headers: {
+          cookie: `session=${token}`,
+        },
+      }
+    );
   }
 });
