@@ -24,6 +24,16 @@ enum AspectRatio {
   ratio_1_1
 }
 
+enum AvatarRenderMode {
+  preview
+  hd
+}
+
+enum AvatarRenderCrop {
+  head
+  half_body
+}
+
 enum ProjectStatus {
   active
   archived
@@ -354,14 +364,15 @@ model VideoJob {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  project      Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  team         Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  owner        User           @relation("VideoJobOwner", fields: [ownerId], references: [id])
-  nodes        WorkflowNode[]
-  artifacts    Artifact[]
-  scripts      Script[]
-  ttsRequests  TtsRequest[]
-  legalReviews LegalReview[]
+  project              Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  team                 Team                  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner                User                  @relation("VideoJobOwner", fields: [ownerId], references: [id])
+  nodes                WorkflowNode[]
+  artifacts            Artifact[]
+  scripts              Script[]
+  ttsRequests          TtsRequest[]
+  legalReviews         LegalReview[]
+  avatarRenderRequests AvatarRenderRequest[]
 
   @@index([projectId])
   @@index([teamId, createdAt])
@@ -387,10 +398,11 @@ model WorkflowNode {
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
-  job           VideoJob       @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  artifacts     Artifact[]
-  ttsRequests   TtsRequest[]
-  voiceCloneJob VoiceCloneJob?
+  job                  VideoJob              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  artifacts            Artifact[]
+  ttsRequests          TtsRequest[]
+  voiceCloneJob        VoiceCloneJob?
+  avatarRenderRequests AvatarRenderRequest[]
 
   @@index([jobId])
   @@index([jobId, nodeType])
@@ -408,9 +420,10 @@ model Artifact {
   metadata   Json?
   createdAt  DateTime @default(now())
 
-  job         VideoJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  node        WorkflowNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  ttsRequests TtsRequest[]
+  job                       VideoJob              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  node                      WorkflowNode          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  ttsRequests               TtsRequest[]
+  avatarRenderAudioRequests AvatarRenderRequest[] @relation("AvatarRenderAudioArtifact")
 
   @@index([jobId])
   @@index([nodeId])
@@ -691,6 +704,32 @@ model TtsRequest {
   @@map("tts_requests")
 }
 
+model AvatarRenderRequest {
+  id                String           @id @default(cuid())
+  jobId             String
+  nodeId            String
+  avatarId          String
+  audioArtifactId   String
+  mode              AvatarRenderMode
+  aspectRatio       AspectRatio
+  crop              AvatarRenderCrop
+  provider          String
+  providerRequestId String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  job           VideoJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  node          WorkflowNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  avatar        Avatar       @relation(fields: [avatarId], references: [id], onDelete: Restrict)
+  audioArtifact Artifact     @relation("AvatarRenderAudioArtifact", fields: [audioArtifactId], references: [id], onDelete: Restrict)
+
+  @@index([jobId, createdAt])
+  @@index([nodeId])
+  @@index([avatarId])
+  @@index([audioArtifactId])
+  @@map("avatar_render_requests")
+}
+
 model Avatar {
   id            String        @id @default(cuid())
   teamId        String
@@ -708,10 +747,11 @@ model Avatar {
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
 
-  team        Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  owner       User            @relation("AvatarOwner", fields: [ownerId], references: [id])
-  sourceAsset Asset           @relation(fields: [sourceAssetId], references: [id], onDelete: Restrict)
-  consents    AvatarConsent[]
+  team           Team                  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner          User                  @relation("AvatarOwner", fields: [ownerId], references: [id])
+  sourceAsset    Asset                 @relation(fields: [sourceAssetId], references: [id], onDelete: Restrict)
+  consents       AvatarConsent[]
+  renderRequests AvatarRenderRequest[]
 
   @@index([teamId, createdAt])
   @@index([teamId, status])

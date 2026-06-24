@@ -11,6 +11,7 @@ import { createReferenceStructureWorkflowNodeHandler } from "@/services/referenc
 import { createReferenceUrlImportWorkflowNodeHandler } from "@/services/referenceUrlImportWorkerService";
 import { createTtsWorkflowNodeHandler } from "@/services/ttsWorkerService";
 import { createVoiceCloneWorkflowNodeHandler } from "@/services/voiceCloneWorkerService";
+import { createAvatarRenderWorkflowNodeHandler } from "@/services/avatarRenderWorkerService";
 
 export const WORKFLOW_NODE_EXECUTION_FAILED = "WORKFLOW_NODE_EXECUTION_FAILED";
 
@@ -147,6 +148,7 @@ export function createDefaultWorkflowNodeHandlers(): WorkflowNodeHandlers {
     legal_review: createRiskWorkflowNodeHandler(),
     voice_clone: createVoiceCloneWorkflowNodeHandler(),
     tts: createTtsWorkflowNodeHandler(),
+    avatar_render: createAvatarRenderWorkflowNodeHandler(),
   };
 }
 
