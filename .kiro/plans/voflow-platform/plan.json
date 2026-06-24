@@ -4,12 +4,12 @@
   "sourceDocs": [
     "docs/01-智能口播平台需求文档.md",
     "docs/02-智能口播平台开发技术文档.md",
-    "docs/03-VoFlow开发执行规范.md",
+    "AI_RULES.md",
     "yuanxing.html"
   ],
   "executionStandards": {
     "effectiveFrom": "voflow-assets-compliance",
-    "document": "docs/03-VoFlow开发执行规范.md",
+    "document": "AI_RULES.md",
     "requiredForAllSubsequentSpecs": true,
     "rules": [
       "不得在运行时代码、Worker、API route 或前端业务逻辑中新增硬编码配置、密钥、平台列表、状态文案、错误码、MIME 白名单或大小限制",

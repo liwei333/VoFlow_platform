@@ -3,7 +3,7 @@
 ## Implementation Plan
 
 - [ ] 0. 执行后续开发规范检查
-  - 先阅读 `docs/03-VoFlow开发执行规范.md`
+  - 先阅读 `AI_RULES.md`
   - 本 Spec 不得在 API、Adapter 或 UI 中散写平台规则、标题长度、标签数量、token 状态、错误码、发布状态文案或重试策略
   - 平台规则、Channel Adapter、发布草稿 serializer、token 加密、参数检查和 API 响应必须进入公共 helper/service
   - 若发现同类逻辑已经重复两处以上，先抽公共函数或公共常量，再继续业务实现

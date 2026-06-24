@@ -115,7 +115,11 @@ describe("Avatar render provider service", () => {
         headers: { "Content-Type": "application/json" },
       })
     );
-    expect(JSON.parse(transport.mock.calls[0][1].body as string)).toMatchObject({
+    const [, requestInit] = transport.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(JSON.parse(requestInit.body as string)).toMatchObject({
       requestId: "render-request-1",
       jobId: "job-1",
       nodeId: "node-1",

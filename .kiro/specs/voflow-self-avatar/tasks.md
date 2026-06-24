@@ -3,7 +3,7 @@
 ## Implementation Plan
 
 - [x] 0. 执行后续开发规范检查
-  - 先阅读 `docs/03-VoFlow开发执行规范.md`
+  - 先阅读 `AI_RULES.md`
   - 本 Spec 不得在 route、检测器或 UI 中散写图片格式、尺寸阈值、人脸角度阈值、usage scope、状态文案或错误码
   - 照片上传必须复用素材能力；质检阈值、肖像授权、avatar serializer 和 API 响应必须进入公共 helper/service
   - 若发现同类逻辑已经重复两处以上，先抽公共函数或公共常量，再继续业务实现

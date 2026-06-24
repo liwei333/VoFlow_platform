@@ -3,7 +3,7 @@
 ## Implementation Plan
 
 - [x] 0. 执行后续开发规范检查
-  - 先阅读 `docs/03-VoFlow开发执行规范.md`
+  - 先阅读 `AI_RULES.md`
   - 不得在页面、API 或 Worker 中散写 yt-dlp binary、平台白名单、错误码、状态文案、时长限制、大小限制或下载开关
   - 新增配置必须收口到配置模块和 `.env.example`
   - 新增 API 必须复用统一鉴权、统一响应、Zod 校验和 serializer

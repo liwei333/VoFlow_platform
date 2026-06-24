@@ -3,7 +3,7 @@
 ## Implementation Plan
 
 - [x] 0. 执行后续开发规范检查
-  - 先阅读 `docs/03-VoFlow开发执行规范.md`
+  - 先阅读 `AI_RULES.md`
   - 本 Spec 不得在 Worker、API 或 UI 中散写渲染服务地址、预览/高清分辨率、crop 选项、错误码、状态文案或 artifact 路径
   - Avatar 服务 baseUrl、服务状态、状态文案和健康检查必须复用 `voflow-local-model-monitor` 的 `avatar` 服务注册表、配置 helper、health adapter 和 API
   - Avatar render provider、输入校验、ffprobe 校验、artifact 写入和 API 响应必须进入公共 helper/service
@@ -69,20 +69,20 @@
   - 保留 mock provider 作为测试 fallback
   - _Requirements: US-2, US-3_
 
-- [ ] 10. 实现数字人选择和渲染 UI
+- [x] 10. 实现数字人选择和渲染 UI
   - 展示我的数字人列表
   - 展示画面比例和裁剪选项
   - 展示预览播放器和确认按钮
   - _Requirements: US-1, US-2, US-4_
 
-- [ ] 11. 添加测试
+- [x] 11. 添加测试
   - avatar not ready 被拒绝
   - audio artifact 缺失被拒绝
   - mock provider 输出 artifact
   - invalid output 标记节点失败
   - _Requirements: US-1, US-2, US-3, US-4_
 
-- [ ] 12. Checkpoint: 数字人渲染验收
+- [x] 12. Checkpoint: 数字人渲染验收
   - 用户选择我的数字人和 TTS 音频
   - 系统生成可播放低清预览
   - 用户确认后生成高清中间视频
@@ -103,7 +103,7 @@
 - `.kiro/plans/voflow-platform/plan.md`
 
 ### 范围说明
-- 本次完成：读取并对照 `docs/03-VoFlow开发执行规范.md`，确认 `voflow-video-render` 的 `requirements.md`、`design.md`、`tasks.md` 已存在，且总控计划已允许从声音克隆 checkpoint 后进入本 Spec。
+- 本次完成：读取并对照 `AI_RULES.md`，确认 `voflow-video-render` 的 `requirements.md`、`design.md`、`tasks.md` 已存在，且总控计划已允许从声音克隆 checkpoint 后进入本 Spec。
 - 本次完成：复核现有公共基础，确认 `avatar_render` workflow node 已在 `src/lib/workflow/constants.ts` 中定义，`avatar` 本地模型服务已在 `src/lib/local-model/config.ts` 和 `src/services/localModelService.ts` 中注册，artifact 写库已有 `writeWorkflowArtifact()`，对象存储路径已有 `buildJobArtifactPath()` / `uploadJobArtifact()`。
 - 当前任务执行判断：Task 1 是下一个可执行任务，应先创建 `avatar_render_requests` 数据表和 migration，关联 job、node、avatar、TTS audio artifact，并添加 mode、crop、aspectRatio 的数据库与测试约束。
 - 明确未完成：本轮未创建数据库表、未实现 provider、未实现输入校验 service、未实现 API、未实现 Worker、未实现 UI。
@@ -138,9 +138,139 @@
 
 ### 验收结论
 - 是否满足当前 task：满足 Task 0。
-- 是否满足对应 Acceptance Criteria：满足启动 `voflow-video-render` 前的开发规范检查、公共化边界确认和任务执行判断；US-1 到 US-4 的业务实现从 Task 1 开始。
-- 是否允许勾选：允许勾选 Task 0，不允许勾选 Task 1-12。
-- MVP 状态矩阵是否需要同步更新：需要，`voflow-video-render` 从 `not_started` 进入 `partial`，下一步为 Task 1 创建渲染请求数据库迁移。
+
+### Task 10: 数字人选择和渲染 UI
+
+### 任务
+- Spec: `voflow-video-render`
+- Task: 10
+- Requirements: US-1、US-2、US-4
+
+### 修改文件
+- `src/lib/avatar-render/ui.ts`
+- `src/components/avatar-render/AvatarRenderPanel.tsx`
+- `src/app/dashboard/voices/page.tsx`
+- `tests/avatar-render-ui.test.tsx`
+- `.kiro/specs/voflow-video-render/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：新增 `AvatarRenderPanel`，在“我的声音”页面语音结果之后展示数字人渲染入口，支持加载我的 ready 数字人、选择已确认 TTS 音频、展示项目画面比例、选择人物裁剪、创建低清预览、刷新渲染结果、播放预览视频、确认预览生成高清任务、重新预览。
+- 本次完成：新增 `src/lib/avatar-render/ui.ts`，收口裁剪选项、渲染模式 label、画面比例 label 和节点状态 label，页面不重复维护渲染状态文案。
+- 本次完成：`voices/page.tsx` 从项目数据读取 `aspectRatio` 并传入渲染面板，创建 preview 时使用项目比例。
+- 明确未完成：Task 11 的补充测试和 Task 12 的最终 checkpoint 尚未完成；真实 MuseTalk/SadTalker 服务仍需最终 MVP 环境人工复验。
+- 是否使用 mock/provider/adapter 占位：本次 UI 未新增 provider；继续使用前序 Task 2-9 已实现的 mock/local provider 后端边界。
+
+### 硬编码检查
+- 是否新增运行时硬编码：未新增服务地址、密钥、模型名、错误码或状态枚举；UI 默认 crop 初始值使用已有 `AvatarRenderCrop` 枚举值 `half_body`，具体可选项和展示文案收口在 `src/lib/avatar-render/ui.ts`。
+- 新增配置是否收口：本次未新增环境配置；画面比例复用 `src/lib/aspect-ratio.ts` 的 API 类型和项目返回值。
+- 新增错误码/状态/枚举是否收口：未新增错误码；渲染模式、crop 和状态展示收口到 `src/lib/avatar-render/ui.ts`，底层枚举仍复用 `src/lib/avatar-render/constants.ts`。
+
+### 公共化检查
+- 复用的公共模块：`src/lib/avatar-render/constants.ts`、`src/lib/avatar-render/ui.ts`、`src/lib/aspect-ratio.ts`、`src/components/tts/TtsResultPanel.tsx` 的 TTS result view model、现有 avatar/tts/avatar-render API。
+- 新增的公共函数/service：新增 `getAvatarRenderAspectRatioLabel()`、`getAvatarRenderModeLabel()`、`getAvatarRenderCropLabel()`、`getAvatarRenderNodeStatusLabel()`。
+- 后续需要抽取的重复逻辑：Task 11 可继续围绕 `AvatarRenderPanel` 增加交互测试；若后续高级剪辑/导出页面也展示 avatar video artifact，再考虑抽 artifact preview 组件。
+
+### 验证命令
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/vitest run tests/avatar-render-ui.test.tsx`: 先失败于缺少数字人渲染 UI，随后通过，1 file / 3 tests。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/vitest run tests/avatar-render-ui.test.tsx tests/tts-ui.test.tsx tests/avatar-render-schema.test.ts tests/avatar-render-service.test.ts tests/avatar-render-api.test.ts tests/avatar-render-worker-service.test.ts tests/avatar-render-provider-service.test.ts tests/avatar-render-output-validation.test.ts`: 通过，8 files / 42 tests。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/next lint`: 通过，无 ESLint warnings/errors。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/next build`: 通过。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/tsc --noEmit`: 未通过，失败来自既有测试类型问题，例如 `tests/avatar-detector.test.ts` 缺少 `vi` 导入、部分旧 fixture JSON 类型不匹配；`next build` 已完成应用类型检查并通过。
+- `npm run lint` / `npm run build`: 当前 Codex 桌面 shell 中 `npm` 不在 PATH，因此使用本地 `node_modules/.bin/next` 和内置 Node 路径替代执行。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 10。
+- 是否满足对应 Acceptance Criteria：满足 US-1 的用户选择入口、US-2 的预览创建/播放/确认入口、US-4 的 aspectRatio 和 crop 参数展示与提交；后端拒绝逻辑已由 Task 3-9 覆盖。
+- 是否允许勾选：允许勾选 Task 10。
+- MVP 状态矩阵是否需要同步更新：需要，`voflow-video-render` 仍为 `partial`，但证据补充 Task 10 UI 已完成；下一步推进 Task 11。
+
+### Task 11: 添加测试
+
+### 任务
+- Spec: `voflow-video-render`
+- Task: 11
+- Requirements: US-1、US-2、US-3、US-4
+
+### 修改文件
+- `tests/avatar-render-acceptance.test.ts`
+- `src/services/workflowWorkerService.ts`
+- `.kiro/specs/voflow-video-render/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：新增 `tests/avatar-render-acceptance.test.ts`，以 Task 11 的四个验收点组织覆盖：avatar not ready 被拒绝且不创建 render request/node、缺失 TTS audio artifact 被拒绝且不创建 render request/node、mock provider 输出写入 `avatar_video` artifact 且 preview node 进入 `waiting_approval`、invalid provider output 经 `executeWorkflowNode()` 后落库为 `failed` 并且不写 artifact。
+- 本次完成：修正 `executeWorkflowNode()` 对带业务错误码 Error 的 message 归一化，去掉 `${code}: ` 前缀后再写入节点 `error.message`，使 invalid output 失败信息保持用户可读，同时保留 `AVATAR_RENDER_INVALID_OUTPUT` 错误码。
+- 明确未完成：Task 12 的最终 checkpoint 尚未完成；真实 MuseTalk/SadTalker 服务仍需最终 MVP 环境人工复验。
+- 是否使用 mock/provider/adapter 占位：本次测试继续使用前序 Task 已实现的 mock provider/worker dependency injection；没有新增 provider 占位。
+
+### 硬编码检查
+- 是否新增运行时硬编码：未新增服务地址、密钥、模型名、平台列表、状态枚举或错误码；新增测试 fixture 中的 ID/URL/时间仅用于测试。
+- 新增配置是否收口：本次未新增配置。
+- 新增错误码/状态/枚举是否收口：未新增错误码/状态/枚举；测试复用 `AVATAR_RENDER_ERROR_CODES`、`AVATAR_RENDER_NODE_TYPE`、`WORKFLOW_NODE_STATUS` 等公共常量。
+
+### 公共化检查
+- 复用的公共模块：`src/lib/avatar-render/constants.ts`、`src/lib/workflow/status.ts`、`src/services/avatarRenderService.ts`、`src/services/avatarRenderWorkerService.ts`、`src/services/workflowWorkerService.ts`。
+- 新增的公共函数/service：未新增 service；调整 `normalizeExecutionError()` 的错误 message 归一化逻辑。
+- 后续需要抽取的重复逻辑：acceptance 测试 fixture 与现有 service/worker 测试有相似建数逻辑，Task 12 checkpoint 后若继续扩展端到端验收，可考虑抽 `tests/helpers/avatar-render-fixture.ts`。
+
+### 验证命令
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/vitest run tests/avatar-render-acceptance.test.ts`: 先失败于 invalid output error message 带 `AVATAR_RENDER_INVALID_OUTPUT:` 前缀，修正后通过，1 file / 4 tests。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/vitest run tests/avatar-render-acceptance.test.ts tests/avatar-render-ui.test.tsx tests/avatar-render-schema.test.ts tests/avatar-render-service.test.ts tests/avatar-render-api.test.ts tests/avatar-render-worker-service.test.ts tests/avatar-render-provider-service.test.ts tests/avatar-render-output-validation.test.ts tests/workflow-worker-artifact-service.test.ts`: 通过，9 files / 51 tests。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/next lint`: 通过，无 ESLint warnings/errors。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/next build`: 通过。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/tsc --noEmit`: 未通过，失败来自既有测试类型问题，例如 `tests/avatar-detector.test.ts` 缺少 `vi` 导入、旧 JSON fixture 类型与 Prisma `InputJsonValue` 不匹配、部分 tuple/fixture 推断为 `[]`；本次新增文件和业务代码未出现在错误列表中，`next build` 已完成应用类型检查并通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 11。
+- 是否满足对应 Acceptance Criteria：满足 US-1 的 avatar/audio 拒绝测试、US-2 的 mock preview artifact 写入测试、US-3 的 invalid output failed 节点测试、US-4 的 render task 参数链路回归覆盖。
+- 是否允许勾选：允许勾选 Task 11。
+- MVP 状态矩阵是否需要同步更新：需要，`voflow-video-render` 仍为 `partial`，但证据补充 Task 11 测试已完成；下一步推进 Task 12 checkpoint。
+
+### Task 12: Checkpoint 数字人渲染验收
+
+### 任务
+- Spec: `voflow-video-render`
+- Task: 12
+- Requirements: US-1、US-2、US-3、US-4
+
+### 修改文件
+- `tests/avatar-render-provider-service.test.ts`
+- `.kiro/specs/voflow-video-render/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+
+### 范围说明
+- 本次完成：逐条对照 `requirements.md` 和 Task 12 验收项，确认数字人渲染链路已具备 UI 选择入口、preview/hd API、worker artifact 写入、preview 确认/重试、invalid output 失败落库和渲染结果查询。
+- 本次完成：使用现有 focused tests 和 Task 11 acceptance tests 作为 checkpoint 证据，覆盖“选择我的数字人和 TTS 音频”、“低清预览 artifact”、“确认后高清任务”、“失败任务可重试且历史版本保留”。
+- 本次完成：启动本地 Next dev server 并请求 `/dashboard/voices`，确认页面路由可响应；未登录返回 `/login?from=%2Fdashboard%2Fvoices` 为预期鉴权跳转。
+- 本次复验补充：修正 `tests/avatar-render-provider-service.test.ts` 中 `vi.fn()` mock calls 的参数类型断言，避免 `tsc --noEmit` 把当前 avatar render 测试误报为空 tuple。
+- 明确未完成：真实 MuseTalk/SadTalker 服务未在本 checkpoint 人工联调；当前真实 provider 侧只完成 local adapter、服务状态读取、超时/错误映射和 mock fallback 自动化验收，因此 MVP 状态矩阵仍保持 `partial`，不能宣称真实模型生产能力完成。
+- 是否使用 mock/provider/adapter 占位：是。mock provider 已用于自动化预览/高清链路验收；local provider adapter 已接入但真实模型服务需最终环境人工复验。
+
+### 硬编码检查
+- 是否新增运行时硬编码：本次 checkpoint 未新增运行时代码；前序 Task 10-11 已确认 UI label、crop/mode/resolution/error code 均收口到公共常量或 UI helper。
+- 新增配置是否收口：本次未新增配置；avatar 服务配置仍复用 `local_model_services.avatar`。
+- 新增错误码/状态/枚举是否收口：本次未新增错误码/状态/枚举；继续复用 `AVATAR_RENDER_ERROR_CODES`、`WORKFLOW_NODE_STATUS`、`AVATAR_RENDER_DEFAULT_RESOLUTIONS` 等公共常量。
+
+### 公共化检查
+- 复用的公共模块：`src/lib/avatar-render/constants.ts`、`src/lib/avatar-render/ui.ts`、`src/lib/avatar-render/output-validation.ts`、`src/services/avatarRenderService.ts`、`src/services/avatarRenderWorkerService.ts`、`src/services/avatarRenderResultService.ts`、`src/services/workflowWorkerService.ts`、`src/services/workflowActionService.ts`。
+- 新增的公共函数/service：本次 checkpoint 未新增。
+- 后续需要抽取的重复逻辑：若 Task 12 之后继续扩展真实端到端样本，可将 avatar render 的测试建数抽到 `tests/helpers/avatar-render-fixture.ts`，当前不阻塞 checkpoint。
+
+### 验证命令
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/vitest run tests/avatar-render-ui.test.tsx tests/avatar-render-acceptance.test.ts tests/avatar-render-service.test.ts tests/avatar-render-api.test.ts tests/avatar-render-worker-service.test.ts tests/avatar-render-provider-service.test.ts tests/avatar-render-output-validation.test.ts tests/workflow-actions-api.test.ts tests/workflow-worker-artifact-service.test.ts`: 通过，9 files / 50 tests。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/vitest run tests/avatar-render-schema.test.ts tests/avatar-render-ui.test.tsx tests/avatar-render-acceptance.test.ts tests/avatar-render-service.test.ts tests/avatar-render-api.test.ts tests/avatar-render-worker-service.test.ts tests/avatar-render-provider-service.test.ts tests/avatar-render-output-validation.test.ts tests/workflow-actions-api.test.ts tests/workflow-worker-artifact-service.test.ts tests/tts-ui.test.tsx tests/tts-result-service.test.ts`: 通过，12 files / 57 tests。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/next lint`: 通过，无 ESLint warnings/errors。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/next build`: 通过。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/prisma migrate status`: 通过，15 migrations found，database schema is up to date。
+- `curl -I http://localhost:3000/dashboard/voices`: 通过，返回 `307 Temporary Redirect` 到 `/login?from=%2Fdashboard%2Fvoices`，符合未登录鉴权预期；验证后已停止 dev server。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/tsc --noEmit`: 未通过，失败来自既有测试类型问题，例如 `tests/avatar-detector.test.ts` 缺少 `vi` 导入、旧 JSON fixture 类型与 Prisma `InputJsonValue` 不匹配、`tests/voice-trainer-service.test.ts` 仍有 mock tuple 推断问题；当前 avatar render 相关文件已不在错误列表中，`next build` 已完成应用类型检查并通过。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 12。
+- 是否满足对应 Acceptance Criteria：满足 US-1、US-2、US-3、US-4 的 mock/local adapter 级自动化验收；真实 MuseTalk/SadTalker 人工联调仍作为最终 MVP 环境复验项保留。
+- 是否允许勾选：允许勾选 Task 12。
+- MVP 状态矩阵是否需要同步更新：需要，`voflow-video-render` 的 Spec checklist 已完成，但 MVP 主线状态仍保持 `partial`，缺口明确为真实模型服务最终环境人工复验；开发游标可进入 `voflow-advanced-editing` Task 0。
 
 ### Task 1: 渲染请求数据库迁移
 

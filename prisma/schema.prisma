@@ -34,6 +34,13 @@ enum AvatarRenderCrop {
   half_body
 }
 
+enum EditingPipPosition {
+  top_left
+  top_right
+  bottom_left
+  bottom_right
+}
+
 enum ProjectStatus {
   active
   archived
@@ -220,11 +227,13 @@ model Asset {
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
 
-  owner            User              @relation("AssetOwner", fields: [ownerId], references: [id])
-  consents         AssetConsent[]
-  referenceSources ReferenceSource[]
-  sourceAvatars    Avatar[]
-  voiceSamples     VoiceSample[]
+  owner                    User              @relation("AssetOwner", fields: [ownerId], references: [id])
+  consents                 AssetConsent[]
+  referenceSources         ReferenceSource[]
+  sourceAvatars            Avatar[]
+  voiceSamples             VoiceSample[]
+  editingPipConfigs        EditingConfig[]   @relation("EditingPipAsset")
+  editingBackgroundConfigs EditingConfig[]   @relation("EditingBackgroundAsset")
 
   @@index([teamId, createdAt])
   @@index([teamId, type])
@@ -373,6 +382,7 @@ model VideoJob {
   ttsRequests          TtsRequest[]
   legalReviews         LegalReview[]
   avatarRenderRequests AvatarRenderRequest[]
+  editingConfig        EditingConfig?
 
   @@index([projectId])
   @@index([teamId, createdAt])
@@ -424,10 +434,41 @@ model Artifact {
   node                      WorkflowNode          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
   ttsRequests               TtsRequest[]
   avatarRenderAudioRequests AvatarRenderRequest[] @relation("AvatarRenderAudioArtifact")
+  editingPreviewConfigs     EditingConfig[]       @relation("EditingPreviewArtifact")
 
   @@index([jobId])
   @@index([nodeId])
   @@map("artifacts")
+}
+
+model EditingConfig {
+  id                      String             @id @default(cuid())
+  jobId                   String             @unique
+  subtitleEnabled         Boolean            @default(true)
+  keywordHighlightEnabled Boolean            @default(false)
+  bgmDuckingEnabled       Boolean            @default(true)
+  pipEnabled              Boolean            @default(false)
+  pipAssetId              String?
+  pipPosition             EditingPipPosition @default(top_right)
+  pipSize                 Int                @default(25)
+  backgroundAssetId       String?
+  voiceVolume             Int                @default(100)
+  bgmVolume               Int                @default(35)
+  transitionStrength      Int                @default(50)
+  configJson              Json?
+  previewArtifactId       String?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  job             VideoJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  pipAsset        Asset?    @relation("EditingPipAsset", fields: [pipAssetId], references: [id], onDelete: SetNull)
+  backgroundAsset Asset?    @relation("EditingBackgroundAsset", fields: [backgroundAssetId], references: [id], onDelete: SetNull)
+  previewArtifact Artifact? @relation("EditingPreviewArtifact", fields: [previewArtifactId], references: [id], onDelete: SetNull)
+
+  @@index([pipAssetId])
+  @@index([backgroundAssetId])
+  @@index([previewArtifactId])
+  @@map("editing_configs")
 }
 
 model LocalModelService {

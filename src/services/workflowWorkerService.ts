@@ -223,9 +223,12 @@ export function createMockWorkflowNodeHandler(nodeType: WorkflowQueuePayload["no
 
 function normalizeExecutionError(error: unknown): WorkflowNodeExecutionError {
   if (error instanceof Error && hasErrorCode(error)) {
+    const prefix = `${error.code}: `;
     return {
       code: error.code,
-      message: error.message,
+      message: error.message.startsWith(prefix)
+        ? error.message.slice(prefix.length)
+        : error.message,
     };
   }
 

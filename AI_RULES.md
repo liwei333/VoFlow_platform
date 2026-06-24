@@ -1,11 +1,11 @@
-# VoFlow 开发执行规范
+# AI_RULES.md - VoFlow 开发执行规范
 
 版本：v0.1
-生效范围：从 `voflow-assets-compliance` 当前未完成任务开始，适用于所有后续 Kiro Spec 任务。
+生效范围：适用于 VoFlow Platform 后续所有 Kiro Spec、返修项、Checkpoint 验收和开发执行反馈。实际开发入口以 `.kiro/plans/voflow-platform/plan.md` 的当前开发游标、各 `.kiro/specs/*/tasks.md` 的勾选状态为准；不得根据本文中的历史示例推断当前任务。AI 工具在执行任何开发任务前，必须先读取本文件，再按“下一任务启动检查”读取 plan 和当前 Spec 文档。
 
 ## 1. 总原则
 
-1. 先读当前 Spec 的 `requirements.md`、`design.md`、`tasks.md`，再改代码。
+1. 先按“下一任务启动检查”读取 `AI_RULES.md`、总控 plan、当前 Spec 的 `requirements.md`、`design.md`、`tasks.md`，再改代码。
 2. 只做当前任务要求的最小闭环，不顺手扩大功能范围。
 3. 新增能力必须有明确的校验、错误码、测试和验收命令。
 4. 后续任务不得绕过已有公共模块；已有公共模块不足时，先补公共模块，再写业务代码。
@@ -31,18 +31,26 @@
 
 运行时代码必须通过配置模块读取环境变量。生产环境缺少关键密钥时必须 fail fast，不允许使用默认密钥继续运行。
 
+存量代码中若已有环境变量默认值或散落配置，除非当前任务直接触达该模块或该问题阻塞验收，不得借题扩大重构。当前任务触达相关模块时，必须按以下顺序处理：先补配置读取或校验测试，再迁移调用方，再记录验证命令。生产关键密钥不得继续新增默认值。
+
 ## 3. 配置和常量收口
 
-后续任务涉及配置或枚举时，优先新增或复用以下公共层：
+后续任务涉及配置或枚举时，优先复用已有领域模块；若不存在，再新增清晰命名的公共层。
 
-1. `src/lib/config.ts` 或 `src/lib/env.ts`：统一读取和校验环境变量。
-2. `src/lib/api-response.ts`：统一 API 成功、错误、Zod 校验失败、分页响应。
-3. `src/lib/auth-cookie.ts`：统一 session cookie 名称和 cookie options。
-4. `src/lib/platforms.ts`：统一发布平台、平台 label、平台规则和默认平台。
-5. `src/lib/workflow/constants.ts`：统一任务节点类型、状态、可重试/需确认规则。
-6. `src/lib/assets/validation.ts`：统一素材 MIME 白名单和大小限制。
-7. `src/lib/assets/serializer.ts`：统一 asset、artifact 的 JSON 输出和签名 URL 生成。
-8. `tests/helpers/**`：统一登录、测试文件、fixture、API_BASE 和清理逻辑。
+已有公共层：
+
+1. `src/lib/api-response.ts`：统一 API 成功、错误、Zod 校验失败、分页响应。
+2. `src/lib/api-auth.ts` / `src/lib/auth.ts`：统一 API 鉴权、session token、用户状态和 team membership 校验。
+3. `src/lib/workflow/constants.ts`、`src/lib/workflow/errors.ts`、`src/lib/workflow/status.ts`：统一 workflow 节点、状态、错误口径。
+4. `src/lib/assets/validation.ts`、`src/lib/assets/serializer.ts`、`src/lib/assets/ui.ts`：统一素材校验、输出和 UI 展示口径。
+5. `src/lib/local-model/config.ts`：统一本地模型服务配置。
+6. 各领域 `constants.ts` / `ui.ts` / `serializer.ts`：如 `tts`、`voice-clone`、`avatar`、`avatar-render`、`legal-review`、`references`。
+
+建议补齐：
+
+1. `src/lib/config.ts` 或领域 `config.ts`：新增环境变量必须集中读取和校验。
+2. `tests/helpers/**`：后续触达大量重复 login、fixture、mock、API_BASE 逻辑时再抽取。
+3. 发布平台规则模块：进入 `voflow-publish-assistant` 时，再按实际边界创建 `src/lib/publish/*` 或等价领域模块，不能提前写死在页面。
 
 如果当前任务发现同类逻辑已经在两个以上文件重复，必须优先提取公共函数或公共常量。
 
@@ -55,6 +63,7 @@
 5. 所有业务 API 必须使用统一鉴权 helper 校验 session、用户状态和 team 权限。
 6. BigInt、Date、枚举映射、签名 URL 不在 route 中散写，必须通过 serializer 输出。
 7. route 中只保留编排逻辑；数据库查询、状态机、授权校验、对象存储路径应进入 service/helper。
+8. route 不直接暴露 service、provider、Worker 或底层依赖的异常文本；领域错误必须映射为稳定的 `code`、`message` 和 HTTP status。
 
 ## 5. 前端规范
 
@@ -63,10 +72,11 @@
 3. 未实现页面可继续复用 `PlaceholderPage`，但真实页面不能复制占位逻辑。
 4. 表单选项必须来自公共常量或 API 返回，不能在多个页面分别维护。
 5. 用户可见错误必须来自 API 的明确 `message` 或前端统一错误映射。
+6. 领域展示文案、状态色、状态 label 和格式化函数优先收口到对应 `src/lib/<domain>/ui.ts`；业务枚举和阈值优先收口到对应 `constants.ts`。
 
 ## 6. Worker 和对象存储规范
 
-1. Worker payload 必须包含 `jobId`、`nodeId`、`nodeType`、`version`、`traceId`。
+1. 队列入口 Worker payload 必须包含 `jobId`、`nodeId`、`nodeType`、`version`、`traceId`；内部 service/helper 可以传更窄 DTO，但必须能追溯到 `traceId`、`jobId` 和 `nodeId`。
 2. artifact 路径必须复用 `buildJobArtifactPath(teamId, jobId, node)`。
 3. 素材路径必须复用 `buildAssetPath(teamId, assetId)`。
 4. Worker 不直接拼对象存储路径、不直接读取 MinIO 环境变量。
@@ -83,6 +93,8 @@
    - 当前任务相关测试，例如 `npm run test:run -- tests/validation.test.ts`
    - 如涉及 API 集成测试，先启动依赖服务和 `npm run dev`，再运行 `API_BASE=http://localhost:3000 npm run test:run -- tests/api.test.ts`
 6. 若测试依赖外部服务未启动导致失败，必须在验收记录里写清前置条件和失败原因。
+7. 涉及类型、route、Next 页面、Prisma client 或跨模块改动时，必须运行 `npx tsc --noEmit` 或 `npm run build`。
+8. 修改 `prisma/schema.prisma` 或 migrations 时，必须运行 `npm run db:generate`，并记录数据库同步命令；本地非交互环境不要把 `prisma migrate dev` 作为默认自动化验收命令。
 
 ## 8. 后续任务执行记录要求
 
@@ -92,7 +104,9 @@
 2. 是否新增运行时硬编码；如有，说明为什么无法避免。
 3. 是否新增公共函数或复用已有公共函数。
 4. 运行的验证命令和结果。
-5. 未完成风险或需要后续任务继续处理的公共化点。
+5. 开始前已有未提交改动、本任务实际改动、未触碰的既有改动。
+6. 是否更新 `tasks.md`、`plan.md` 或新增 Change Log / 返修项。
+7. 未完成风险或需要后续任务继续处理的公共化点。
 
 ## 9. Spec 变更规则
 
@@ -100,10 +114,16 @@
 
 1. 原任务要求真实模型、真实平台或真实 Worker，但当前只能实现 mock、provider、adapter 或占位接口。
 2. 原任务要求端到端闭环，但当前只完成中间 artifact、配置、接口或 UI 壳。
-3. 新增配置项、错误码、状态枚举、Provider 类型、平台规则、素材类型或任务节点类型。
-4. 任务实现边界从 API 扩展到 Worker、数据库、对象存储、UI 或本地模型服务。
-5. 验收命令、测试范围或外部依赖发生变化。
+3. 任务边界、验收口径或 MVP 状态发生变化。
+4. 任务实现边界超出原设计，从单层实现扩展到 API、Worker、数据库、对象存储、UI 或本地模型服务等多层联动。
+5. 验收命令、测试范围或外部依赖发生实质变化，且会影响后续任务判断。
 6. 某个任务不能按原计划完成，需要拆分成“抽象/占位”和“真实接入”两个阶段。
+
+以下情况在原 Spec 边界内时，可在执行反馈中记录，不必先改 Spec：
+
+1. 新增具体错误码、状态枚举、Provider 类型、平台规则、素材类型或任务节点类型，且 `requirements.md` / `design.md` 已包含对应能力边界。
+2. 新增内部 service/helper、serializer 字段、测试 helper 或 UI 格式化函数。
+3. focused tests 的文件名或命令细节调整，但验收目标不变。
 
 Spec 变更记录必须写入对应 `tasks.md` 的 “Change Log” 或 “返修项” 章节，格式如下：
 
@@ -156,6 +176,11 @@ Spec 变更记录必须写入对应 `tasks.md` 的 “Change Log” 或 “返�
 - 明确未完成：
 - 是否使用 mock/provider/adapter 占位：
 
+### 工作区状态
+- 开始前已有未提交改动：
+- 本任务实际改动：
+- 未触碰的既有改动：
+
 ### 硬编码检查
 - 是否新增运行时硬编码：
 - 新增配置是否收口：
@@ -176,14 +201,20 @@ Spec 变更记录必须写入对应 `tasks.md` 的 “Change Log” 或 “返�
 - 是否满足对应 Acceptance Criteria：
 - 是否允许勾选：
 - MVP 状态矩阵是否需要同步更新：
+
+### 文档同步
+- 是否更新 `tasks.md`：
+- 是否更新 `plan.md`：
+- 是否新增 Change Log / 返修项：
 ```
 
 ## 12. 下一任务启动检查
 
 启动任一新任务前，必须先完成以下检查：
 
-1. 读取 `.kiro/plans/voflow-platform/plan.md`，确认当前开发游标允许启动该 Spec。
-2. 读取当前 Spec 的 `requirements.md`、`design.md`、`tasks.md`。
-3. 明确本次只处理一个 task 或一个返修项；若需要扩大范围，先更新 Spec Change。
-4. 写出当前 task 的验收命令；没有验收命令不得开始实现。
-5. 若当前工作区已有未提交修改，确认哪些是本任务相关，哪些只需保留不碰。
+1. 读取 `AI_RULES.md`。
+2. 读取 `.kiro/plans/voflow-platform/plan.md`，确认当前唯一开发入口和依赖顺序。
+3. 读取当前 Spec 的 `requirements.md`、`design.md`、`tasks.md`。
+4. 运行 `git status --short`，确认哪些是本任务相关改动，哪些只需保留不碰。
+5. 明确本次只处理一个 task 或一个返修项；若需要扩大范围，先更新 Spec Change。
+6. 写出当前 task 的文件范围和验收命令；没有验收命令不得开始实现。

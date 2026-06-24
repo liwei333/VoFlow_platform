@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TTS_PITCH_RANGE, TTS_SPEED_RANGE } from "@/lib/tts/constants";
+import type { ApiAspectRatio } from "@/lib/aspect-ratio";
 import type { SerializedVoice } from "@/lib/tts/serializer";
 import type { SerializedVoiceSample } from "@/lib/voice-clone/serializer";
 import {
@@ -16,11 +17,13 @@ import {
   TtsResultPanel,
   type TtsResultViewModel,
 } from "@/components/tts/TtsResultPanel";
+import { AvatarRenderPanel } from "@/components/avatar-render/AvatarRenderPanel";
 
 type Project = {
   id: string;
   name: string;
   targetPlatform: string;
+  aspectRatio: ApiAspectRatio;
 };
 
 type ScriptCandidate = {
@@ -117,6 +120,10 @@ export default function VoicesPage() {
   const selectedVoice = useMemo(
     () => voices.find((voice) => voice.id === selectedVoiceId) ?? null,
     [selectedVoiceId, voices]
+  );
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === selectedProjectId) ?? null,
+    [projects, selectedProjectId]
   );
   const approvedCandidates = useMemo(
     () =>
@@ -794,6 +801,14 @@ export default function VoicesPage() {
         onRefresh={() => fetchTtsResults(selectedJobId)}
         onConfirm={confirmTtsResult}
         onRegenerate={() => regenerateTts()}
+      />
+
+      <AvatarRenderPanel
+        jobId={selectedJobId}
+        projectAspectRatio={selectedProject?.aspectRatio ?? "9:16"}
+        ttsResults={ttsResults}
+        onError={setErrorMessage}
+        onNotice={setNoticeMessage}
       />
     </div>
   );

@@ -3,7 +3,7 @@
 ## Implementation Plan
 
 - [x] 0. 执行后续开发规范检查
-  - 先阅读 `docs/03-VoFlow开发执行规范.md`
+  - 先阅读 `AI_RULES.md`
   - 本 Spec 不得在 Worker、API 或 UI 中散写声音样本格式、质量阈值、训练服务地址、usage scope、状态文案或错误码
   - 声音样本上传必须复用素材能力；授权校验、训练 provider、voice serializer 和 API 响应必须进入公共 helper/service
   - 若发现同类逻辑已经重复两处以上，先抽公共函数或公共常量，再继续业务实现
@@ -92,7 +92,7 @@
 - `.kiro/plans/voflow-platform/plan.md`
 
 ### 范围说明
-- 本次完成：读取并对照 `docs/03-VoFlow开发执行规范.md`，确认 `voflow-voice-clone` 的 `requirements.md`、`design.md`、`tasks.md` 已存在，且当前计划允许从 `voflow-reference-url-import` checkpoint 完成后进入本 Spec。
+- 本次完成：读取并对照 `AI_RULES.md`，确认 `voflow-voice-clone` 的 `requirements.md`、`design.md`、`tasks.md` 已存在，且当前计划允许从 `voflow-reference-url-import` checkpoint 完成后进入本 Spec。
 - 当前任务执行判断：Task 1 是下一个可执行任务，应先创建 `voice_samples`、`voice_consents`、`voice_clone_jobs` 数据表和迁移，再进入上传、质检、授权和训练链路。
 - 明确未完成：本轮未创建数据库表、未实现 API、未实现 UI、未实现 trainer adapter。
 - 是否使用 mock/provider/adapter 占位：本轮未实现运行时代码；后续 Task 6 如使用 mock trainer，必须在执行反馈中明确标注 mock/provider 边界。

@@ -3,7 +3,7 @@
 ## Implementation Plan
 
 - [x] 0. 执行后续开发规范检查
-  - 先阅读 `docs/03-VoFlow开发执行规范.md`
+  - 先阅读 `AI_RULES.md`
   - 本 Spec 不得在 route、Worker 或 UI 中散写风险类型、严重级别、处理动作、风险词库、错误码或状态文案
   - 风险规则、LLM 法务解释 provider、审计日志写入、TTS 前阻断校验和 API 响应必须进入公共 helper/service
   - 若发现同类逻辑已经重复两处以上，先抽公共函数或公共常量，再继续业务实现

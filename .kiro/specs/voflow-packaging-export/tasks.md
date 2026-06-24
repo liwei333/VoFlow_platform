@@ -3,7 +3,7 @@
 ## Implementation Plan
 
 - [ ] 0. 执行后续开发规范检查
-  - 先阅读 `docs/03-VoFlow开发执行规范.md`
+  - 先阅读 `AI_RULES.md`
   - 本 Spec 不得在 Worker、API 或 UI 中散写 FFmpeg 参数、字幕样式、BGM 规则、封面尺寸、下载 URL 有效期、错误码或 artifact 路径
   - Export worker、ffprobe 校验、下载 URL、封面/字幕 serializer、端到端测试 fixture 和 API 响应必须进入公共 helper/service
   - 若发现同类逻辑已经重复两处以上，先抽公共函数或公共常量，再继续业务实现

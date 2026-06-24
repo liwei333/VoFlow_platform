@@ -3,7 +3,7 @@
 ## Implementation Plan
 
 - [x] 0. 执行后续开发规范检查
-  - 先阅读 `docs/03-VoFlow开发执行规范.md`
+  - 先阅读 `AI_RULES.md`
   - 本 Spec 不得在 Worker、API 或 UI 中散写 TTS 服务地址、音色状态、参数范围、3000 字限制、错误码或音频 artifact 路径
   - TTS 服务 baseUrl、服务状态、状态文案和健康检查必须复用 `voflow-local-model-monitor` 的 `tts` 服务注册表、配置 helper、health adapter 和 API
   - TTS provider、音色 serializer、参数校验、artifact 写入、API 响应必须进入公共 helper/service

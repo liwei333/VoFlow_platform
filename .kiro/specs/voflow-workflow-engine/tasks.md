@@ -3,7 +3,7 @@
 ## Implementation Plan
 
 - [x] 0. 执行后续开发规范检查
-  - 先阅读 `docs/03-VoFlow开发执行规范.md`
+  - 先阅读 `AI_RULES.md`
   - 本 Spec 不得新增运行时硬编码配置、任务节点类型、状态文案、错误码、重试次数或队列 payload 字段
   - 任务节点枚举、状态机、队列 payload、artifact serializer、API 响应必须优先进入公共 helper/service
   - 若发现同类逻辑已经重复两处以上，先抽公共函数或公共常量，再继续业务实现

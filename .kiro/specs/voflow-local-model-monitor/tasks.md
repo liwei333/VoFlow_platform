@@ -3,7 +3,7 @@
 ## Implementation Plan
 
 - [x] 0. 执行后续开发规范检查
-  - 先阅读 `docs/03-VoFlow开发执行规范.md`
+  - 先阅读 `AI_RULES.md`
   - 本 Spec 不得在 health API、页面或 Worker 中散写模型服务地址、模型名、超时时间、状态文案或 FFmpeg 命令路径
   - LLM/ASR/TTS/AVATAR/FFMPEG 配置读取必须收口到公共配置模块和服务注册表
   - 若发现同类逻辑已经重复两处以上，先抽公共函数或公共常量，再继续业务实现

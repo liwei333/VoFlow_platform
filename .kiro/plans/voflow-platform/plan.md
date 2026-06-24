@@ -40,12 +40,12 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 
 ## 3.0 后续开发执行规范
 
-从当前 `voflow-assets-compliance` 未完成任务开始，所有后续 Spec 执行必须先遵守 `docs/03-VoFlow开发执行规范.md`。
+所有后续 Kiro Spec、返修项和 Checkpoint 验收必须先遵守根目录 `AI_RULES.md`。实际开发入口以本文件的当前开发游标和各 `.kiro/specs/*/tasks.md` 的勾选状态为准；不得根据历史游标或旧执行反馈推断当前任务。
 
 执行约束：
 
 1. 不得在运行时代码、Worker、API route 或前端业务逻辑中新增服务地址、密钥、模型名、平台列表、状态文案、错误码、MIME 白名单、大小限制等硬编码。
-2. 新增配置必须收口到 `src/lib/config.ts` 或等价配置模块；生产关键密钥缺失时必须 fail fast。
+2. 新增配置必须收口到已有领域配置模块、`src/lib/config.ts` 或等价配置模块；生产关键密钥缺失时必须 fail fast。
 3. 新增 API 必须复用统一鉴权、统一响应、统一 Zod 错误处理和 serializer；如果公共模块缺失，先补公共模块。
 4. 同类逻辑第二次出现时必须抽公共函数或公共常量，不能复制粘贴到后续 Spec。
 5. 每个 Checkpoint 必须反馈硬编码检查、公共函数提取情况，以及实际运行的验证命令。
@@ -90,8 +90,8 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | 8 | 系统生成改写文案和标题候选 | `voflow-script-ai` | done | 文案改写、标题生成、风险检查测试 | 需在最终 MVP 环境复验 |
 | 9 | 系统执行 AI 法务审查，给出风险原因和替换建议 | `voflow-legal-review` | done | 法务审查 API/service 测试 | 需在最终 MVP 环境复验 |
 | 10 | 用户选择预置音色或克隆音色生成语音 | `voflow-tts`, `voflow-voice-clone` | partial | 预置音色 TTS 已完成；`voflow-voice-clone` Task 0-11 已全部完成：声音样本上传复用 asset upload 并限定音频格式，质量检测阈值/错误码/mock 指标已收口，授权确认写入 `voice_consents` 且强制 `usageScope` 包含 `voice_clone` 和 `tts_generation`，合格且已授权样本可创建 `voice_clone` workflow node 和 `voice_clone_jobs`，mock/local/GPT-SoVITS/CosyVoice trainer adapter 已接入，`voice_clone` worker 可下载样本、调用 trainer、写入成功 output 或失败 `errorJson`，trainer 输出会创建 active/approved cloned voice 并关联 `voice_clone_jobs.outputVoiceId`，我的声音页面支持预置/克隆音色分区、试听、重训、删除、授权状态和训练状态展示，cloned voice 删除置为 disabled，新 TTS 不能选择 disabled voice，历史 TTS request 保留 voice 引用，Task 11 checkpoint 已补充 API 正向测试确认 active/approved cloned voice 可创建 TTS 任务 | 真实 GPT-SoVITS/CosyVoice 训练服务未在本 checkpoint 人工联调，需最终 MVP 环境复验后再升级为 done |
-| 11 | 系统使用我的数字人生成口播视频 | `voflow-video-render` | partial | Task 0 已完成后续开发规范检查，确认渲染服务配置必须复用 `local_model_services.avatar`；Task 1 已新增 `avatar_render_requests` 数据库迁移、`AvatarRenderMode`/`AvatarRenderCrop` 枚举、`AvatarRenderRequest` Prisma model，并关联 job、node、avatar、audio artifact；Task 2 已新增 avatar render 常量/类型、`AvatarRenderProvider.renderAvatarVideo(payload)` 接口、mock MP4 provider 和 local provider adapter，确认未直接读取 `AVATAR_BASE_URL`；Task 3 已新增 `validateAvatarRenderInput()`，校验 avatar ready、license approved、succeeded TTS audio artifact 和 aspectRatio 与项目一致，错误码收口到 avatar-render constants；Task 4 已新增 `POST /api/video-jobs/{jobId}/avatar-render/preview`，复用输入校验创建 preview `avatar_render_requests`、投递 `avatar_render` workflow node，并通过 `AVATAR_RENDER_DEFAULT_RESOLUTIONS.preview` 集中设置预览分辨率；Task 5 已新增 `avatar_render` worker，下载 source image/audio，读取 `local_model_services.avatar` 后调用 provider，复用 `uploadJobArtifact()` 上传并通过 `writeWorkflowArtifact()` 写入 `avatar_video` artifact，成功回写 `providerRequestId`，preview 输出进入 `waiting_approval`；Task 6 已新增 avatar render 输出校验 helper，上传前校验文件大小、ffprobe duration 和 video stream，invalid output 统一返回 `AVATAR_RENDER_INVALID_OUTPUT`；Task 7 已新增 preview confirm/retry API 和 `approveAvatarRenderPreview()` / `retryAvatarRenderPreview()`，确认后将 preview node 标记 `approved` 并创建 `mode=hd` request/node，重试时取消原 preview node 并创建新 preview request/node；Task 8 已新增 `POST /api/video-jobs/{jobId}/avatar-render/hd` 和 `createHdAvatarRenderTask()`，只允许从 `approved` preview request 创建 `mode=hd` request/node 并投递高清渲染任务；Task 9 已补齐真实模型服务配置接入验收，确认 Worker 默认读取 `local_model_services.avatar` 的 `baseUrl`/`status`/`modelName`，local provider 408/504/AbortError 映射 `AVATAR_PROVIDER_TIMEOUT`，其他不可用映射 `AVATAR_PROVIDER_UNAVAILABLE`，mock fallback 不读取 registry；schema/provider/service/API/worker/output-validation focused tests、相关 workflow/local-model/avatar/TTS tests、lint、build 通过 | Task 10-12 待实现；数字人渲染 UI 和最终 checkpoint 尚未完成，真实 MuseTalk/SadTalker 服务仍需最终环境人工复验 |
-| 12 | 系统合成字幕、BGM、画中画、封面和最终 MP4 | `voflow-advanced-editing`, `voflow-packaging-export` | not_started | - | Spec 未开始 |
+| 11 | 系统使用我的数字人生成口播视频 | `voflow-video-render` | partial | Task 0 已完成后续开发规范检查，确认渲染服务配置必须复用 `local_model_services.avatar`；Task 1 已新增 `avatar_render_requests` 数据库迁移、`AvatarRenderMode`/`AvatarRenderCrop` 枚举、`AvatarRenderRequest` Prisma model，并关联 job、node、avatar、audio artifact；Task 2 已新增 avatar render 常量/类型、`AvatarRenderProvider.renderAvatarVideo(payload)` 接口、mock MP4 provider 和 local provider adapter，确认未直接读取 `AVATAR_BASE_URL`；Task 3 已新增 `validateAvatarRenderInput()`，校验 avatar ready、license approved、succeeded TTS audio artifact 和 aspectRatio 与项目一致，错误码收口到 avatar-render constants；Task 4 已新增 `POST /api/video-jobs/{jobId}/avatar-render/preview`，复用输入校验创建 preview `avatar_render_requests`、投递 `avatar_render` workflow node，并通过 `AVATAR_RENDER_DEFAULT_RESOLUTIONS.preview` 集中设置预览分辨率；Task 5 已新增 `avatar_render` worker，下载 source image/audio，读取 `local_model_services.avatar` 后调用 provider，复用 `uploadJobArtifact()` 上传并通过 `writeWorkflowArtifact()` 写入 `avatar_video` artifact，成功回写 `providerRequestId`，preview 输出进入 `waiting_approval`；Task 6 已新增 avatar render 输出校验 helper，上传前校验文件大小、ffprobe duration 和 video stream，invalid output 统一返回 `AVATAR_RENDER_INVALID_OUTPUT`；Task 7 已新增 preview confirm/retry API 和 `approveAvatarRenderPreview()` / `retryAvatarRenderPreview()`，确认后将 preview node 标记 `approved` 并创建 `mode=hd` request/node，重试时取消原 preview node 并创建新 preview request/node；Task 8 已新增 `POST /api/video-jobs/{jobId}/avatar-render/hd` 和 `createHdAvatarRenderTask()`，只允许从 `approved` preview request 创建 `mode=hd` request/node 并投递高清渲染任务；Task 9 已补齐真实模型服务配置接入验收，确认 Worker 默认读取 `local_model_services.avatar` 的 `baseUrl`/`status`/`modelName`，local provider 408/504/AbortError 映射 `AVATAR_PROVIDER_TIMEOUT`，其他不可用映射 `AVATAR_PROVIDER_UNAVAILABLE`，mock fallback 不读取 registry；Task 10 已新增数字人渲染 UI，支持选择我的数字人、项目画面比例、裁剪选项、已确认 TTS 音频、低清预览创建、预览播放器、确认预览和重新预览；Task 11 已新增 acceptance 测试覆盖 avatar not ready 拒绝、缺失 TTS audio artifact 拒绝、mock provider 写入 `avatar_video` artifact、invalid output 经执行层落库为 failed 且不写 artifact，并修正工作流错误 message 归一化；Task 12 checkpoint 已完成，确认 mock/local adapter 级链路覆盖“选择数字人和 TTS 音频 -> 低清预览 -> 确认高清 -> 失败重试/历史版本保留”，schema/provider/service/API/worker/output-validation/UI/acceptance focused tests、相关 workflow/local-model/avatar/TTS tests、lint、build、migrate status 和页面鉴权请求验证通过 | 真实 MuseTalk/SadTalker 服务仍需最终环境人工复验，不能按真实模型生产能力标记为 done |
+| 12 | 系统合成字幕、BGM、画中画、封面和最终 MP4 | `voflow-advanced-editing`, `voflow-packaging-export` | partial | `voflow-advanced-editing` Task 1 已新增 `editing_configs` 数据表、`EditingPipPosition` enum、job 一对一绑定、可选素材/preview artifact 外键，以及 `pipSize`/`voiceVolume`/`bgmVolume` 数据库 CHECK 约束；schema RED/GREEN 测试、Prisma validate/migrate/generate、lint/build 已通过 | 尚未实现剪辑配置查询/保存 API、素材授权校验、关键词高亮、剪辑预览 Worker、剪辑 UI、packaging-export 最终 MP4 合成和下载 |
 | 13 | 系统生成各平台标题、标签、描述、话题 | `voflow-publish-assistant` | not_started | - | Spec 未开始 |
 | 14 | 用户一键发布到已授权平台，未授权或 token 过期平台给出可处理状态 | `voflow-publish-assistant` | not_started | - | Spec 未开始 |
 | 15 | 任务中心展示每个节点状态、产物和失败重试入口 | `voflow-workflow-engine` | partial | workflow engine 任务中心和状态机测试 | 需与后续 reference_url_import/voice_clone/avatar_render/export/publish 节点端到端联调 |
@@ -110,9 +110,9 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 
 当前唯一开发入口：
 
-- Active Spec: `voflow-video-render`
-- Active Scope: 真实模型服务配置接入验收已完成
-- Active Focus: Task 10 实现数字人选择和渲染 UI：展示我的数字人列表、画面比例和裁剪选项、预览播放器和确认按钮
+- Active Spec: `voflow-advanced-editing`
+- Active Scope: Task 1 剪辑配置数据表已完成，已有底层 schema/约束，但尚未交付用户可用剪辑能力
+- Active Focus: Task 2 实现剪辑配置查询 API
 - Status: `ready_for_next_task`
 
 未完成当前游标前，不允许并行启动以下新 Spec：
@@ -146,8 +146,8 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 | `voflow-tts` | done | 与 voice clone 和 avatar render 联调 |
 | `voflow-self-avatar` | done | 最终 MVP 环境复验 |
 | `voflow-voice-clone` | partial | 真实 trainer 环境复验后升级为 done |
-| `voflow-video-render` | partial | 继续 Task 10：实现数字人选择和渲染 UI |
-| `voflow-advanced-editing` | not_started | 依赖 video render |
+| `voflow-video-render` | partial | 最终 MVP 环境复验真实 MuseTalk/SadTalker 服务 |
+| `voflow-advanced-editing` | partial | 继续 Task 2：实现剪辑配置查询 API |
 | `voflow-packaging-export` | not_started | 依赖 legal-review/video-render/advanced-editing |
 | `voflow-publish-assistant` | not_started | 依赖 packaging-export |
 
@@ -157,4 +157,4 @@ VoFlow Platform MVP 需要拆分为多个 Spec。原因：
 2. 具体需求以各 Spec 的 `requirements.md` 为准，技术边界以 `design.md` 为准，执行进度以 `tasks.md` 为准。
 3. 任务实现中若发现原计划需要拆分、降级为 mock/provider、或新增配置/错误码/状态，必须先更新对应 Spec 文档，再改代码。
 4. 任一 Checkpoint 不得只因为 `tasks.md` 全部勾选就视为完成，必须逐条对照 Acceptance Criteria 和 MVP 状态矩阵。
-5. 每次任务完成必须按 `docs/03-VoFlow开发执行规范.md` 的执行反馈模板回报。
+5. 每次任务完成必须按 `AI_RULES.md` 的执行反馈模板回报。
