@@ -18,6 +18,17 @@ import {
   type TtsResultViewModel,
 } from "@/components/tts/TtsResultPanel";
 import { AvatarRenderPanel } from "@/components/avatar-render/AvatarRenderPanel";
+import {
+  EditingConfigPanel,
+  type EditingConfigDraft,
+  type EditingMediaAssetViewModel,
+} from "@/components/editing/EditingConfigPanel";
+import {
+  ExportPanel,
+  type ExportRequestViewModel,
+} from "@/components/export/ExportPanel";
+import type { SerializedAsset } from "@/lib/assets/serializer";
+import type { SerializedEditingConfig } from "@/lib/editing/serializer";
 
 type Project = {
   id: string;
@@ -115,6 +126,13 @@ export default function VoicesPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [noticeMessage, setNoticeMessage] = useState("");
   const [ttsResults, setTtsResults] = useState<TtsResultViewModel[]>([]);
+  const [editingConfig, setEditingConfig] = useState<SerializedEditingConfig | null>(null);
+  const [editingAssets, setEditingAssets] = useState<EditingMediaAssetViewModel[]>([]);
+  const [savingEditingConfig, setSavingEditingConfig] = useState(false);
+  const [creatingEditingPreview, setCreatingEditingPreview] = useState(false);
+  const [exportRequests, setExportRequests] = useState<ExportRequestViewModel[]>([]);
+  const [creatingExport, setCreatingExport] = useState(false);
+  const [downloadingArtifactId, setDownloadingArtifactId] = useState<string | null>(null);
 
   const groupedVoices = useMemo(() => groupVoicesByType(voices), [voices]);
   const selectedVoice = useMemo(
@@ -164,6 +182,10 @@ export default function VoicesPage() {
   const voiceCloneTrainingStatus = getVoiceCloneTrainingStatusLabel(
     voiceCloneTrainingTask?.voiceCloneJob.status
   );
+  const latestExport = exportRequests[0] ?? null;
+  const exportSubtitleSummary = latestExport?.subtitleArtifactId
+    ? "已生成字幕产物"
+    : "等待字幕产物";
 
   const fetchVoices = useCallback(async () => {
     const response = await fetch("/api/voices");
@@ -202,6 +224,9 @@ export default function VoicesPage() {
       setScripts([]);
       setJobs([]);
       setTtsResults([]);
+      setEditingConfig(null);
+      setEditingAssets([]);
+      setExportRequests([]);
       return;
     }
 
@@ -252,6 +277,76 @@ export default function VoicesPage() {
     }
   }, []);
 
+  const fetchEditingData = useCallback(async (jobId: string) => {
+    if (!jobId) {
+      setEditingConfig(null);
+      setEditingAssets([]);
+      return;
+    }
+
+    try {
+      const [configResponse, assetsResponse] = await Promise.all([
+        fetch(`/api/video-jobs/${jobId}/editing-config`),
+        fetch("/api/assets?pageSize=100&licenseStatus=approved"),
+      ]);
+      const [configBody, assetsBody] = await Promise.all([
+        configResponse.json() as Promise<
+          ApiResponse<{ config: SerializedEditingConfig }>
+        >,
+        assetsResponse.json() as Promise<
+          ApiResponse<{ assets: SerializedAsset[] }>
+        >,
+      ]);
+
+      if (configBody.code !== "SUCCESS" || !configBody.data) {
+        setEditingConfig(null);
+        setErrorMessage(configBody.message || "剪辑配置加载失败");
+        return;
+      }
+
+      setEditingConfig(configBody.data.config);
+      setEditingAssets(
+        assetsBody.code === "SUCCESS" && assetsBody.data
+          ? assetsBody.data.assets.map((asset) => ({
+              id: asset.id,
+              name: asset.name,
+              type: asset.type,
+              licenseStatus: asset.licenseStatus,
+            }))
+          : []
+      );
+    } catch (error) {
+      console.error("Failed to fetch editing data:", error);
+      setEditingConfig(null);
+      setEditingAssets([]);
+      setErrorMessage("剪辑配置加载失败");
+    }
+  }, []);
+
+  const fetchExportData = useCallback(async (jobId: string) => {
+    if (!jobId) {
+      setExportRequests([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/video-jobs/${jobId}/export`);
+      const body = (await response.json()) as ApiResponse<{
+        requests: ExportRequestViewModel[];
+      }>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setExportRequests([]);
+        return;
+      }
+
+      setExportRequests(body.data.requests);
+    } catch (error) {
+      console.error("Failed to fetch export data:", error);
+      setExportRequests([]);
+    }
+  }, []);
+
   useEffect(() => {
     async function loadInitialData() {
       setLoading(true);
@@ -276,6 +371,14 @@ export default function VoicesPage() {
   useEffect(() => {
     fetchTtsResults(selectedJobId);
   }, [fetchTtsResults, selectedJobId]);
+
+  useEffect(() => {
+    fetchEditingData(selectedJobId);
+  }, [fetchEditingData, selectedJobId]);
+
+  useEffect(() => {
+    fetchExportData(selectedJobId);
+  }, [fetchExportData, selectedJobId]);
 
   async function submitTtsTask(endpoint: string): Promise<boolean> {
     if (!hasTtsInputs) {
@@ -523,6 +626,132 @@ export default function VoicesPage() {
       setErrorMessage("克隆音色删除失败");
     } finally {
       setDeletingVoiceId(null);
+    }
+  }
+
+  async function saveEditingConfig(draft: EditingConfigDraft) {
+    if (!selectedJobId) {
+      setErrorMessage("请先选择视频任务");
+      return;
+    }
+
+    setSavingEditingConfig(true);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(`/api/video-jobs/${selectedJobId}/editing-config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      const body = (await response.json()) as ApiResponse<{
+        config: SerializedEditingConfig;
+      }>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setErrorMessage(body.message || "剪辑配置保存失败");
+        return;
+      }
+
+      setEditingConfig(body.data.config);
+      setNoticeMessage("剪辑配置已保存");
+    } catch (error) {
+      console.error("Failed to save editing config:", error);
+      setErrorMessage("剪辑配置保存失败");
+    } finally {
+      setSavingEditingConfig(false);
+    }
+  }
+
+  async function createEditingPreview() {
+    if (!selectedJobId) {
+      setErrorMessage("请先选择视频任务");
+      return;
+    }
+
+    setCreatingEditingPreview(true);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(`/api/video-jobs/${selectedJobId}/editing-preview`, {
+        method: "POST",
+      });
+      const body = (await response.json()) as ApiResponse<unknown>;
+
+      if (body.code !== "SUCCESS") {
+        setErrorMessage(body.message || "剪辑预览任务创建失败");
+        return;
+      }
+
+      setNoticeMessage("剪辑预览任务已创建");
+      await fetchEditingData(selectedJobId);
+    } catch (error) {
+      console.error("Failed to create editing preview:", error);
+      setErrorMessage("剪辑预览任务创建失败");
+    } finally {
+      setCreatingEditingPreview(false);
+    }
+  }
+
+  async function createExport(outputProfile: "mp4_720p" | "mp4_1080p") {
+    if (!selectedJobId) {
+      setErrorMessage("请先选择视频任务");
+      return;
+    }
+
+    setCreatingExport(true);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(`/api/video-jobs/${selectedJobId}/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outputProfile }),
+      });
+      const body = (await response.json()) as ApiResponse<unknown>;
+
+      if (body.code !== "SUCCESS") {
+        setErrorMessage(body.message || "导出任务创建失败");
+        return;
+      }
+
+      setNoticeMessage("导出任务已创建");
+      await fetchExportData(selectedJobId);
+      await fetchProjectData(selectedProjectId);
+    } catch (error) {
+      console.error("Failed to create export task:", error);
+      setErrorMessage("导出任务创建失败");
+    } finally {
+      setCreatingExport(false);
+    }
+  }
+
+  async function downloadFinalVideo(artifactId: string) {
+    setDownloadingArtifactId(artifactId);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(`/api/artifacts/${artifactId}/download`);
+      const body = (await response.json()) as ApiResponse<{
+        downloadUrl: string;
+      }>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setErrorMessage(body.message || "下载链接生成失败");
+        return;
+      }
+
+      window.open(body.data.downloadUrl, "_blank", "noopener,noreferrer");
+      setNoticeMessage("下载链接已生成");
+    } catch (error) {
+      console.error("Failed to download final video:", error);
+      setErrorMessage("下载链接生成失败");
+    } finally {
+      setDownloadingArtifactId(null);
     }
   }
 
@@ -809,6 +1038,28 @@ export default function VoicesPage() {
         ttsResults={ttsResults}
         onError={setErrorMessage}
         onNotice={setNoticeMessage}
+      />
+
+      {editingConfig && (
+        <EditingConfigPanel
+          config={editingConfig}
+          mediaAssets={editingAssets}
+          saving={savingEditingConfig}
+          previewing={creatingEditingPreview}
+          onSave={saveEditingConfig}
+          onPreview={createEditingPreview}
+        />
+      )}
+
+      <ExportPanel
+        selectedJobId={selectedJobId}
+        subtitleSummary={exportSubtitleSummary}
+        latestExport={latestExport}
+        creating={creatingExport}
+        downloadingArtifactId={downloadingArtifactId}
+        onCreateExport={createExport}
+        onDownload={downloadFinalVideo}
+        onRefresh={() => fetchExportData(selectedJobId)}
       />
     </div>
   );

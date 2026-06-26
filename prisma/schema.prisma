@@ -41,6 +41,43 @@ enum EditingPipPosition {
   bottom_right
 }
 
+enum ExportOutputProfile {
+  mp4_720p
+  mp4_1080p
+}
+
+enum ExportRequestStatus {
+  queued
+  running
+  succeeded
+  failed
+}
+
+enum PublishPlatform {
+  douyin
+  kuaishou
+  xiaohongshu
+  wechat_channels
+  bilibili
+  youtube_shorts
+  tiktok
+}
+
+enum ChannelAccountStatus {
+  connected
+  expired
+  revoked
+  not_connected
+}
+
+enum PublishStatus {
+  pending
+  uploading
+  published
+  failed
+  skipped
+}
+
 enum ProjectStatus {
   active
   archived
@@ -234,6 +271,7 @@ model Asset {
   voiceSamples             VoiceSample[]
   editingPipConfigs        EditingConfig[]   @relation("EditingPipAsset")
   editingBackgroundConfigs EditingConfig[]   @relation("EditingBackgroundAsset")
+  exportBgmRequests        ExportRequest[]   @relation("ExportRequestBgmAsset")
 
   @@index([teamId, createdAt])
   @@index([teamId, type])
@@ -289,19 +327,20 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  ownedTeams      Team[]          @relation("TeamOwner")
+  ownedTeams      Team[]           @relation("TeamOwner")
   teamMemberships TeamMember[]
-  ownedProjects   Project[]       @relation("ProjectOwner")
-  uploadedAssets  Asset[]         @relation("AssetOwner")
+  ownedProjects   Project[]        @relation("ProjectOwner")
+  uploadedAssets  Asset[]          @relation("AssetOwner")
   assetConsents   AssetConsent[]
   auditLogs       AuditLog[]
-  videoJobs       VideoJob[]      @relation("VideoJobOwner")
-  ownedVoices     Voice[]         @relation("VoiceOwner")
-  voiceSamples    VoiceSample[]   @relation("VoiceSampleOwner")
+  videoJobs       VideoJob[]       @relation("VideoJobOwner")
+  ownedVoices     Voice[]          @relation("VoiceOwner")
+  voiceSamples    VoiceSample[]    @relation("VoiceSampleOwner")
   voiceConsents   VoiceConsent[]
-  ownedAvatars    Avatar[]        @relation("AvatarOwner")
+  ownedAvatars    Avatar[]         @relation("AvatarOwner")
   avatarConsents  AvatarConsent[]
-  legalReviews    LegalReview[]   @relation("LegalReviewOwner")
+  legalReviews    LegalReview[]    @relation("LegalReviewOwner")
+  channelAccounts ChannelAccount[]
 
   @@map("users")
 }
@@ -322,6 +361,7 @@ model Team {
   voiceSamples     VoiceSample[]
   avatars          Avatar[]
   legalReviews     LegalReview[]
+  channelAccounts  ChannelAccount[]
 
   @@map("teams")
 }
@@ -383,6 +423,9 @@ model VideoJob {
   legalReviews         LegalReview[]
   avatarRenderRequests AvatarRenderRequest[]
   editingConfig        EditingConfig?
+  exportRequests       ExportRequest[]
+  publishDrafts        PublishDraft[]
+  publishes            Publish[]
 
   @@index([projectId])
   @@index([teamId, createdAt])
@@ -413,6 +456,7 @@ model WorkflowNode {
   ttsRequests          TtsRequest[]
   voiceCloneJob        VoiceCloneJob?
   avatarRenderRequests AvatarRenderRequest[]
+  exportRequests       ExportRequest[]
 
   @@index([jobId])
   @@index([jobId, nodeType])
@@ -435,6 +479,11 @@ model Artifact {
   ttsRequests               TtsRequest[]
   avatarRenderAudioRequests AvatarRenderRequest[] @relation("AvatarRenderAudioArtifact")
   editingPreviewConfigs     EditingConfig[]       @relation("EditingPreviewArtifact")
+  exportAvatarVideoRequests ExportRequest[]       @relation("ExportAvatarVideoArtifact")
+  exportAudioRequests       ExportRequest[]       @relation("ExportAudioArtifact")
+  exportSubtitleRequests    ExportRequest[]       @relation("ExportSubtitleArtifact")
+  exportCoverRequests       ExportRequest[]       @relation("ExportCoverArtifact")
+  publishDraftCovers        PublishDraft[]        @relation("PublishDraftCoverArtifact")
 
   @@index([jobId])
   @@index([nodeId])
@@ -460,15 +509,124 @@ model EditingConfig {
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
 
-  job             VideoJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  pipAsset        Asset?    @relation("EditingPipAsset", fields: [pipAssetId], references: [id], onDelete: SetNull)
-  backgroundAsset Asset?    @relation("EditingBackgroundAsset", fields: [backgroundAssetId], references: [id], onDelete: SetNull)
-  previewArtifact Artifact? @relation("EditingPreviewArtifact", fields: [previewArtifactId], references: [id], onDelete: SetNull)
+  job             VideoJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  pipAsset        Asset?          @relation("EditingPipAsset", fields: [pipAssetId], references: [id], onDelete: SetNull)
+  backgroundAsset Asset?          @relation("EditingBackgroundAsset", fields: [backgroundAssetId], references: [id], onDelete: SetNull)
+  previewArtifact Artifact?       @relation("EditingPreviewArtifact", fields: [previewArtifactId], references: [id], onDelete: SetNull)
+  exportRequests  ExportRequest[]
 
   @@index([pipAssetId])
   @@index([backgroundAssetId])
   @@index([previewArtifactId])
   @@map("editing_configs")
+}
+
+model ExportRequest {
+  id                    String              @id @default(cuid())
+  jobId                 String
+  nodeId                String
+  avatarVideoArtifactId String
+  audioArtifactId       String
+  editingConfigId       String
+  subtitleArtifactId    String?
+  bgmAssetId            String?
+  coverArtifactId       String?
+  outputProfile         ExportOutputProfile @default(mp4_720p)
+  status                ExportRequestStatus @default(queued)
+  errorJson             Json?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  job                 VideoJob      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  node                WorkflowNode  @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  avatarVideoArtifact Artifact      @relation("ExportAvatarVideoArtifact", fields: [avatarVideoArtifactId], references: [id], onDelete: Restrict)
+  audioArtifact       Artifact      @relation("ExportAudioArtifact", fields: [audioArtifactId], references: [id], onDelete: Restrict)
+  editingConfig       EditingConfig @relation(fields: [editingConfigId], references: [id], onDelete: Cascade)
+  subtitleArtifact    Artifact?     @relation("ExportSubtitleArtifact", fields: [subtitleArtifactId], references: [id], onDelete: SetNull)
+  bgmAsset            Asset?        @relation("ExportRequestBgmAsset", fields: [bgmAssetId], references: [id], onDelete: SetNull)
+  coverArtifact       Artifact?     @relation("ExportCoverArtifact", fields: [coverArtifactId], references: [id], onDelete: SetNull)
+
+  @@index([jobId, createdAt])
+  @@index([nodeId])
+  @@index([avatarVideoArtifactId])
+  @@index([audioArtifactId])
+  @@index([editingConfigId])
+  @@index([subtitleArtifactId])
+  @@index([bgmAssetId])
+  @@index([coverArtifactId])
+  @@index([outputProfile])
+  @@index([status])
+  @@map("export_requests")
+}
+
+model ChannelAccount {
+  id             String               @id @default(cuid())
+  teamId         String
+  userId         String
+  platform       PublishPlatform
+  accountName    String?
+  encryptedToken String?
+  status         ChannelAccountStatus @default(not_connected)
+  expiresAt      DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publishes Publish[]
+
+  @@unique([teamId, userId, platform])
+  @@index([teamId, platform])
+  @@index([userId])
+  @@index([status])
+  @@map("channel_accounts")
+}
+
+model PublishDraft {
+  id              String          @id @default(cuid())
+  jobId           String
+  platform        PublishPlatform
+  title           String
+  description     String
+  tagsJson        Json
+  topicsJson      Json
+  coverArtifactId String?
+  validationJson  Json?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  job           VideoJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  coverArtifact Artifact? @relation("PublishDraftCoverArtifact", fields: [coverArtifactId], references: [id], onDelete: SetNull)
+  publishes     Publish[]
+
+  @@unique([jobId, platform])
+  @@index([platform])
+  @@index([coverArtifactId])
+  @@map("publish_drafts")
+}
+
+model Publish {
+  id               String          @id @default(cuid())
+  jobId            String
+  publishDraftId   String
+  channelAccountId String
+  platform         PublishPlatform
+  status           PublishStatus   @default(pending)
+  requestId        String?
+  remoteId         String?
+  errorJson        Json?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  job            VideoJob       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  publishDraft   PublishDraft   @relation(fields: [publishDraftId], references: [id], onDelete: Cascade)
+  channelAccount ChannelAccount @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
+
+  @@index([jobId, platform])
+  @@index([publishDraftId])
+  @@index([channelAccountId])
+  @@index([status])
+  @@map("publishes")
 }
 
 model LocalModelService {
