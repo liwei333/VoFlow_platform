@@ -44,6 +44,10 @@ export interface PublishRecordForSerialization {
   status: "pending" | "uploading" | "published" | "failed" | "skipped";
   requestId: string | null;
   remoteId: string | null;
+  remoteUrl?: string | null;
+  remoteStatus?: unknown;
+  lastSyncedAt?: Date | null;
+  attemptsJson?: unknown;
   errorJson: unknown;
   createdAt: Date;
   updatedAt: Date;
@@ -58,6 +62,10 @@ export interface SerializedPublish {
   status: "pending" | "uploading" | "published" | "failed" | "skipped";
   requestId: string | null;
   remoteId: string | null;
+  remoteUrl: string | null;
+  remoteStatus: unknown;
+  lastSyncedAt: string | null;
+  attemptsJson: unknown;
   errorJson: unknown;
   createdAt: string;
   updatedAt: string;
@@ -97,6 +105,10 @@ export function serializePublish(record: PublishRecordForSerialization): Seriali
     status: record.status,
     requestId: record.requestId,
     remoteId: record.remoteId,
+    remoteUrl: record.remoteUrl ?? null,
+    remoteStatus: record.remoteStatus ?? null,
+    lastSyncedAt: record.lastSyncedAt ? record.lastSyncedAt.toISOString() : null,
+    attemptsJson: record.attemptsJson ?? null,
     errorJson: record.errorJson,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),

@@ -1,7 +1,8 @@
 import type { ChannelAccount, Prisma, PublishStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { getChannelAdapter } from "@/lib/publish/channel-adapter";
+import { getChannelAdapter, type PublishChannelAdapter } from "@/lib/publish/channel-adapter";
 import { getChannelAccountDisplayStatus } from "@/lib/publish/channel-account";
+import { buildPublishRealPlatformConfig, type PublishRealPlatformEnv } from "@/lib/publish/config";
 import {
   PUBLISH_ERROR_CODES,
   PUBLISH_SKIP_CODES,
@@ -14,6 +15,16 @@ import {
 } from "@/lib/publish/publish";
 import { PUBLISH_PLATFORMS, type PublishPlatform } from "@/lib/publish/rules";
 import { readStringArray } from "@/lib/publish/serializer";
+import {
+  decryptChannelToken,
+  requireChannelTokenSecret,
+  type ChannelTokenEnv,
+} from "@/lib/publish/token";
+import {
+  resolveFinalVideoArtifact,
+  type ResolveFinalVideoArtifactDependencies,
+  type ResolvedFinalVideoArtifact,
+} from "@/services/finalVideoArtifactService";
 
 export interface CreatePublishesInput {
   jobId: string;
@@ -21,6 +32,11 @@ export interface CreatePublishesInput {
   userId: string;
   platforms?: PublishPlatform[];
   now?: Date;
+}
+
+export interface PublishServiceOptions extends ResolveFinalVideoArtifactDependencies {
+  env?: PublishRealPlatformEnv & ChannelTokenEnv;
+  fetchImpl?: typeof fetch;
 }
 
 export interface RetryPublishInput {
@@ -117,15 +133,21 @@ const PUBLISH_RECORD_SELECT = {
   status: true,
   requestId: true,
   remoteId: true,
+  remoteUrl: true,
+  remoteStatus: true,
+  lastSyncedAt: true,
+  attemptsJson: true,
   errorJson: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.PublishSelect;
 
 export async function createPublishesForJob(
-  input: CreatePublishesInput
+  input: CreatePublishesInput,
+  options: PublishServiceOptions = {}
 ): Promise<CreatePublishesResult> {
   const now = input.now ?? new Date();
+  const realPlatformConfig = buildPublishRealPlatformConfig(options.env);
   const job = await prisma.videoJob.findFirst({
     where: {
       id: input.jobId,
@@ -171,7 +193,7 @@ export async function createPublishesForJob(
     };
   }
 
-  const [accounts, finalVideoArtifact] = await Promise.all([
+  const [accounts, finalVideoArtifactRecord] = await Promise.all([
     prisma.channelAccount.findMany({
       where: {
         teamId: input.teamId,
@@ -179,19 +201,36 @@ export async function createPublishesForJob(
         platform: { in: targetPlatforms },
       },
     }),
-    prisma.artifact.findFirst({
-      where: {
-        jobId: input.jobId,
-        type: "final_video",
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      select: {
-        id: true,
-      },
-    }),
+    realPlatformConfig.realAdapterEnabled
+      ? Promise.resolve(null)
+      : prisma.artifact.findFirst({
+          where: {
+            jobId: input.jobId,
+            type: "final_video",
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          select: {
+            id: true,
+          },
+        }),
   ]);
+  const finalVideoArtifact = realPlatformConfig.realAdapterEnabled
+    ? await resolveFinalVideoArtifact(
+        {
+          teamId: input.teamId,
+          jobId: input.jobId,
+        },
+        {
+          downloadObject: options.downloadObject,
+        }
+      )
+    : null;
+  const resolvedFinalVideo = finalVideoArtifact?.success
+    ? finalVideoArtifact.data.artifact
+    : null;
+  const finalVideoArtifactId = resolvedFinalVideo?.id ?? finalVideoArtifactRecord?.id ?? null;
 
   const accountByPlatform = new Map<PublishPlatform, ChannelAccount>();
   for (const account of accounts) {
@@ -216,7 +255,7 @@ export async function createPublishesForJob(
     const skipReason = resolveSkipReason({
       validation,
       channelAccountStatus: displayStatus,
-      hasFinalVideoArtifact: Boolean(finalVideoArtifact),
+      hasFinalVideoArtifact: Boolean(finalVideoArtifactId),
     });
 
     if (skipReason) {
@@ -234,12 +273,39 @@ export async function createPublishesForJob(
       continue;
     }
 
-    const adapter = getChannelAdapter(platform);
+    const adapterResult = getAdapterForPublish({
+      platform,
+      account,
+      realAdapterEnabled: realPlatformConfig.realAdapterEnabled,
+      env: options.env,
+      fetchImpl: options.fetchImpl,
+      finalVideo: resolvedFinalVideo,
+    });
+    if (!adapterResult.success) {
+      const failed = await createPublishRecord({
+        jobId: input.jobId,
+        publishDraftId: draft.id,
+        channelAccountId: account.id,
+        platform,
+        status: "failed",
+        requestId: null,
+        remoteId: null,
+        remoteUrl: null,
+        remoteStatus: null,
+        attemptsJson: null,
+        errorJson: adapterResult.error,
+      });
+      savedPublishes.push(failed);
+      continue;
+    }
+
+    const adapter = adapterResult.data;
     const uploadResult = await adapter.uploadVideo({
       platform,
       publishDraftId: draft.id,
       channelAccountId: account.id,
-      finalVideoArtifactId: finalVideoArtifact!.id,
+      finalVideoArtifactId: finalVideoArtifactId!,
+      ...(resolvedFinalVideo ? { finalVideo: resolvedFinalVideo } : {}),
       title: draft.title,
       description: draft.description,
       tags: readStringArray(draft.tagsJson),
@@ -257,6 +323,9 @@ export async function createPublishesForJob(
         status: "failed",
         requestId: null,
         remoteId: null,
+        remoteUrl: null,
+        remoteStatus: null,
+        attemptsJson: null,
         errorJson: uploadResult.error,
       });
       savedPublishes.push(failed);
@@ -267,7 +336,8 @@ export async function createPublishesForJob(
       platform,
       publishDraftId: draft.id,
       channelAccountId: account.id,
-      finalVideoArtifactId: finalVideoArtifact!.id,
+      finalVideoArtifactId: finalVideoArtifactId!,
+      ...(resolvedFinalVideo ? { finalVideo: resolvedFinalVideo } : {}),
       title: draft.title,
       description: draft.description,
       tags: readStringArray(draft.tagsJson),
@@ -285,6 +355,22 @@ export async function createPublishesForJob(
       status: publishResult.success ? publishResult.data.status : "failed",
       requestId: publishResult.success ? publishResult.data.requestId : null,
       remoteId: publishResult.success ? publishResult.data.remotePublishId : null,
+      remoteUrl: publishResult.success ? publishResult.data.remoteUrl ?? null : null,
+      remoteStatus: publishResult.success
+        ? publishResult.data.remoteStatus ?? uploadResult.data.remoteStatus ?? null
+        : null,
+      attemptsJson: publishResult.success
+        ? {
+            attempts: [
+              {
+                action: "publish",
+                requestId: publishResult.data.requestId,
+                remoteId: publishResult.data.remotePublishId,
+                at: now.toISOString(),
+              },
+            ],
+          }
+        : null,
       errorJson: publishResult.success ? null : publishResult.error,
     });
     savedPublishes.push(saved);
@@ -457,6 +543,85 @@ async function resolvePublishChannelAccount(input: {
   });
 }
 
+function getAdapterForPublish(input: {
+  platform: PublishPlatform;
+  account: ChannelAccount;
+  realAdapterEnabled: boolean;
+  env?: PublishRealPlatformEnv & ChannelTokenEnv;
+  fetchImpl?: typeof fetch;
+  finalVideo: ResolvedFinalVideoArtifact | null;
+}):
+  | { success: true; data: PublishChannelAdapter }
+  | {
+      success: false;
+      error: {
+        code: string;
+        message: string;
+      };
+    } {
+  if (!input.realAdapterEnabled) {
+    return {
+      success: true,
+      data: getChannelAdapter(input.platform, input.env ?? process.env),
+    };
+  }
+
+  if (input.platform !== "youtube_shorts") {
+    return {
+      success: false,
+      error: {
+        code: "PUBLISH_REAL_PLATFORM_NOT_CONFIGURED",
+        message: "当前真实发布只支持 YouTube Shorts",
+      },
+    };
+  }
+
+  const encryptedAccessToken = input.account.encryptedAccessToken ?? input.account.encryptedToken;
+  if (!encryptedAccessToken) {
+    return {
+      success: false,
+      error: {
+        code: PUBLISH_SKIP_CODES.channelAccountNotConnected,
+        message: "渠道账号不可发布",
+      },
+    };
+  }
+
+  if (!input.finalVideo) {
+    return {
+      success: false,
+      error: {
+        code: "PUBLISH_FINAL_VIDEO_NOT_FOUND",
+        message: "最终 MP4 产物不存在",
+      },
+    };
+  }
+
+  try {
+    const accessToken = decryptChannelToken(
+      encryptedAccessToken,
+      requireChannelTokenSecret(input.env)
+    );
+
+    return {
+      success: true,
+      data: getChannelAdapter(input.platform, {
+        env: input.env,
+        accessToken,
+        fetchImpl: input.fetchImpl,
+      }),
+    };
+  } catch {
+    return {
+      success: false,
+      error: {
+        code: "CHANNEL_TOKEN_EXPIRED",
+        message: "渠道 token 无法解密，请重新授权",
+      },
+    };
+  }
+}
+
 function resolveSkipReason(input: {
   validation: ReturnType<typeof readPublishValidationSnapshot>;
   channelAccountStatus: "connected" | "expired" | "not_connected";
@@ -501,6 +666,9 @@ async function createPublishRecord(input: {
   status: PublishStatus;
   requestId: string | null;
   remoteId: string | null;
+  remoteUrl?: string | null;
+  remoteStatus?: unknown;
+  attemptsJson?: unknown;
   errorJson: unknown;
 }): Promise<SerializedPublish> {
   const record = await prisma.publish.create({
@@ -512,6 +680,15 @@ async function createPublishRecord(input: {
       status: input.status,
       requestId: input.requestId,
       remoteId: input.remoteId,
+      remoteUrl: input.remoteUrl ?? null,
+      remoteStatus:
+        input.remoteStatus === undefined || input.remoteStatus === null
+          ? undefined
+          : toPrismaJson(input.remoteStatus),
+      attemptsJson:
+        input.attemptsJson === undefined || input.attemptsJson === null
+          ? undefined
+          : toPrismaJson(input.attemptsJson),
       errorJson: input.errorJson === null ? undefined : toPrismaJson(input.errorJson),
     },
     select: PUBLISH_RECORD_SELECT,

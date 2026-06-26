@@ -560,16 +560,26 @@ model ExportRequest {
 }
 
 model ChannelAccount {
-  id             String               @id @default(cuid())
-  teamId         String
-  userId         String
-  platform       PublishPlatform
-  accountName    String?
-  encryptedToken String?
-  status         ChannelAccountStatus @default(not_connected)
-  expiresAt      DateTime?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  id                    String               @id @default(cuid())
+  teamId                String
+  userId                String
+  platform              PublishPlatform
+  provider              String?
+  providerAccountId     String?
+  accountName           String?
+  encryptedToken        String?
+  encryptedAccessToken  String?
+  encryptedRefreshToken String?
+  tokenType             String?
+  scopesJson            Json?
+  metadataJson          Json?
+  status                ChannelAccountStatus @default(not_connected)
+  expiresAt             DateTime?
+  lastAuthorizedAt      DateTime?
+  lastRefreshAt         DateTime?
+  lastErrorJson         Json?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 
   team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -579,6 +589,8 @@ model ChannelAccount {
   @@index([teamId, platform])
   @@index([userId])
   @@index([status])
+  @@index([provider, providerAccountId])
+  @@index([lastRefreshAt])
   @@map("channel_accounts")
 }
 
@@ -614,6 +626,10 @@ model Publish {
   status           PublishStatus   @default(pending)
   requestId        String?
   remoteId         String?
+  remoteUrl        String?
+  remoteStatus     Json?
+  lastSyncedAt     DateTime?
+  attemptsJson     Json?
   errorJson        Json?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
@@ -626,6 +642,7 @@ model Publish {
   @@index([publishDraftId])
   @@index([channelAccountId])
   @@index([status])
+  @@index([lastSyncedAt])
   @@map("publishes")
 }
 

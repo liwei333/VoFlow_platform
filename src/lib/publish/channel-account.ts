@@ -31,9 +31,16 @@ export const CHANNEL_ACCOUNT_STATUS_UI: Record<
 export interface ChannelAccountRecord {
   id: string;
   platform: PublishPlatform;
+  provider?: string | null;
+  providerAccountId?: string | null;
   accountName: string | null;
   status: ChannelAccountStatus;
   expiresAt: Date | null;
+  scopesJson?: unknown;
+  metadataJson?: unknown;
+  lastAuthorizedAt?: Date | null;
+  lastRefreshAt?: Date | null;
+  lastErrorJson?: unknown;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -42,10 +49,17 @@ export interface SerializedChannelAccount {
   id: string | null;
   platform: PublishPlatform;
   platformLabel: string;
+  provider: string | null;
+  providerAccountId: string | null;
   status: ChannelAccountDisplayStatus;
   statusLabel: string;
   accountName: string | null;
+  scopes: string[];
+  metadata: unknown;
   expiresAt: string | null;
+  lastAuthorizedAt: string | null;
+  lastRefreshAt: string | null;
+  lastErrorJson: unknown;
   requiresAuth: boolean;
   createdAt: string | null;
   updatedAt: string | null;
@@ -64,10 +78,19 @@ export function serializeChannelAccount(
     id: account?.id ?? null,
     platform,
     platformLabel: rule.label,
+    provider: account?.provider ?? null,
+    providerAccountId: account?.providerAccountId ?? null,
     status,
     statusLabel: ui.label,
     accountName: account?.accountName ?? null,
+    scopes: readStringArray(account?.scopesJson),
+    metadata: account?.metadataJson ?? null,
     expiresAt: account?.expiresAt ? account.expiresAt.toISOString() : null,
+    lastAuthorizedAt: account?.lastAuthorizedAt
+      ? account.lastAuthorizedAt.toISOString()
+      : null,
+    lastRefreshAt: account?.lastRefreshAt ? account.lastRefreshAt.toISOString() : null,
+    lastErrorJson: account?.lastErrorJson ?? null,
     requiresAuth: ui.requiresAuth,
     createdAt: account?.createdAt ? account.createdAt.toISOString() : null,
     updatedAt: account?.updatedAt ? account.updatedAt.toISOString() : null,
@@ -91,4 +114,10 @@ export function getChannelAccountDisplayStatus(
   }
 
   return "connected";
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }

@@ -114,10 +114,20 @@ describe("Publish assistant database schema", () => {
         { column_name: "teamId" },
         { column_name: "userId" },
         { column_name: "platform" },
+        { column_name: "provider" },
+        { column_name: "providerAccountId" },
         { column_name: "accountName" },
         { column_name: "encryptedToken" },
+        { column_name: "encryptedAccessToken" },
+        { column_name: "encryptedRefreshToken" },
+        { column_name: "tokenType" },
+        { column_name: "scopesJson" },
+        { column_name: "metadataJson" },
         { column_name: "status" },
         { column_name: "expiresAt" },
+        { column_name: "lastAuthorizedAt" },
+        { column_name: "lastRefreshAt" },
+        { column_name: "lastErrorJson" },
         { column_name: "createdAt" },
         { column_name: "updatedAt" },
       ])
@@ -153,6 +163,10 @@ describe("Publish assistant database schema", () => {
         { column_name: "status" },
         { column_name: "requestId" },
         { column_name: "remoteId" },
+        { column_name: "remoteUrl" },
+        { column_name: "remoteStatus" },
+        { column_name: "lastSyncedAt" },
+        { column_name: "attemptsJson" },
         { column_name: "errorJson" },
         { column_name: "createdAt" },
         { column_name: "updatedAt" },
@@ -234,6 +248,14 @@ describe("Publish assistant database schema", () => {
           indexname: "channel_accounts_status_idx",
           indexdef: expect.stringContaining("status"),
         }),
+        expect.objectContaining({
+          indexname: "channel_accounts_provider_providerAccountId_idx",
+          indexdef: expect.stringContaining('"providerAccountId"'),
+        }),
+        expect.objectContaining({
+          indexname: "channel_accounts_lastRefreshAt_idx",
+          indexdef: expect.stringContaining('"lastRefreshAt"'),
+        }),
       ])
     );
 
@@ -271,6 +293,10 @@ describe("Publish assistant database schema", () => {
         expect.objectContaining({
           indexname: "publishes_status_idx",
           indexdef: expect.stringContaining("status"),
+        }),
+        expect.objectContaining({
+          indexname: "publishes_lastSyncedAt_idx",
+          indexdef: expect.stringContaining('"lastSyncedAt"'),
         }),
       ])
     );

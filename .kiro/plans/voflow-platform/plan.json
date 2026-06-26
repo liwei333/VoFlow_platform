@@ -151,6 +151,13 @@
           "workflowType": "requirements-first",
           "depends": ["voflow-packaging-export"],
           "description": "实现平台发布信息、账号授权、参数检查、一键发布、状态同步和失败重试"
+        },
+        {
+          "featureName": "voflow-real-platform-publish",
+          "specType": "feature",
+          "workflowType": "requirements-first",
+          "depends": ["voflow-publish-assistant", "voflow-packaging-export"],
+          "description": "实现首个真实平台 OAuth、真实 Channel Adapter、发布状态同步和最终 MVP 环境复验"
         }
       ]
     }

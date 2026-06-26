@@ -1,13 +1,26 @@
+import {
+  PublishRealPlatformConfigError,
+  buildPublishRealPlatformConfig,
+  type PublishRealPlatformConfig,
+  type PublishRealPlatformEnv,
+} from "@/lib/publish/config";
+import { createYoutubeChannelAdapter } from "@/lib/publish/youtube-adapter";
 import { getPublishPlatformRule, type PublishPlatform } from "@/lib/publish/rules";
 
 export const PUBLISH_CHANNEL_ADAPTER_PROVIDERS = {
   mock: "mock",
+  youtube: "youtube",
 } as const;
 
 export const PUBLISH_ADAPTER_ERROR_CODES = {
+  notConfigured: "PUBLISH_REAL_PLATFORM_NOT_CONFIGURED",
+  finalVideoNotFound: "PUBLISH_FINAL_VIDEO_NOT_FOUND",
   validationFailed: "PUBLISH_VALIDATION_FAILED",
   uploadFailed: "PUBLISH_UPLOAD_FAILED",
   remoteFailed: "PUBLISH_REMOTE_FAILED",
+  rateLimited: "PUBLISH_RATE_LIMITED",
+  reviewRequired: "PUBLISH_PLATFORM_REVIEW_REQUIRED",
+  statusSyncFailed: "PUBLISH_STATUS_SYNC_FAILED",
 } as const;
 
 export const PUBLISH_ADAPTER_REMOTE_STATUSES = {
@@ -43,6 +56,7 @@ export interface ChannelAdapterPublishInput {
   topics: string[];
   coverArtifactId: string | null;
   validationJson: ChannelAdapterValidationSnapshot;
+  finalVideo?: ChannelAdapterFinalVideoInput;
 }
 
 export interface ChannelAdapterPublishWithVideoInput extends ChannelAdapterPublishInput {
@@ -77,6 +91,7 @@ export interface ChannelAdapterUploadResult {
   platform: PublishPlatform;
   requestId: string;
   remoteVideoId: string;
+  remoteStatus?: unknown;
 }
 
 export interface ChannelAdapterPublishResult {
@@ -85,6 +100,8 @@ export interface ChannelAdapterPublishResult {
   requestId: string;
   remotePublishId: string;
   status: PublishAdapterRemoteStatus;
+  remoteUrl?: string | null;
+  remoteStatus?: unknown;
 }
 
 export interface ChannelAdapterStatusResult extends ChannelAdapterPublishResult {
@@ -93,6 +110,14 @@ export interface ChannelAdapterStatusResult extends ChannelAdapterPublishResult 
 
 export interface ChannelAdapterRetryResult extends ChannelAdapterPublishResult {
   previousRequestId: string;
+}
+
+export interface ChannelAdapterFinalVideoInput {
+  id: string;
+  storageUrl: string;
+  contentType: string;
+  sizeBytes: number | null;
+  stream: NodeJS.ReadableStream;
 }
 
 export interface PublishChannelAdapter {
@@ -107,7 +132,48 @@ export interface PublishChannelAdapter {
   retry(input: ChannelAdapterRetryInput): Promise<ChannelAdapterResult<ChannelAdapterRetryResult>>;
 }
 
-export function getChannelAdapter(platform: PublishPlatform): PublishChannelAdapter {
+export interface GetChannelAdapterOptions {
+  env?: PublishRealPlatformEnv;
+  accessToken?: string;
+  config?: PublishRealPlatformConfig;
+  fetchImpl?: typeof fetch;
+}
+
+export function getChannelAdapter(
+  platform: PublishPlatform,
+  optionsOrEnv: PublishRealPlatformEnv | GetChannelAdapterOptions = process.env
+): PublishChannelAdapter {
+  getPublishPlatformRule(platform);
+
+  const options = normalizeAdapterOptions(optionsOrEnv);
+  const realPlatformConfig = options.config ?? buildPublishRealPlatformConfig(options.env);
+  if (realPlatformConfig.realAdapterEnabled && !realPlatformConfig.validation.passed) {
+    throw new PublishRealPlatformConfigError(
+      realPlatformConfig.validation.error?.message ?? "真实发布配置不完整",
+      realPlatformConfig.validation.missingEnvKeys
+    );
+  }
+
+  if (realPlatformConfig.realAdapterEnabled && platform === "youtube_shorts") {
+    if (!options.accessToken) {
+      throw new PublishRealPlatformConfigError(
+        "真实发布 Adapter 缺少访问令牌"
+      );
+    }
+
+    return createYoutubeChannelAdapter({
+      accessToken: options.accessToken,
+      config: realPlatformConfig,
+      fetchImpl: options.fetchImpl,
+    });
+  }
+
+  if (realPlatformConfig.realAdapterEnabled && !realPlatformConfig.allowMockAdapter) {
+    throw new PublishRealPlatformConfigError(
+      "真实发布 Adapter 尚未接入，不能在禁用 mock 回退时继续发布"
+    );
+  }
+
   return createMockChannelAdapter(platform);
 }
 
@@ -223,4 +289,27 @@ function buildMockRequestId(
   publishDraftId: string
 ): string {
   return `mock-${action}-${platform}-${publishDraftId}`;
+}
+
+function normalizeAdapterOptions(
+  optionsOrEnv: PublishRealPlatformEnv | GetChannelAdapterOptions
+): GetChannelAdapterOptions {
+  if (isGetChannelAdapterOptions(optionsOrEnv)) {
+    return optionsOrEnv;
+  }
+
+  return {
+    env: optionsOrEnv,
+  };
+}
+
+function isGetChannelAdapterOptions(
+  value: PublishRealPlatformEnv | GetChannelAdapterOptions
+): value is GetChannelAdapterOptions {
+  return (
+    "env" in value ||
+    "accessToken" in value ||
+    "config" in value ||
+    "fetchImpl" in value
+  );
 }
