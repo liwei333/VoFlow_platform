@@ -42,19 +42,19 @@
   - token 加密存储
   - _Requirements: US-2_
 
-- [ ] 6. 实现 OAuth/授权占位接口
+- [x] 6. 实现 OAuth/授权占位接口
   - MVP 可先使用 mock channel account
   - 真实平台接入保留 adapter
   - token 过期时展示重新授权入口
   - _Requirements: US-2_
 
-- [ ] 7. 实现发布参数检查
+- [x] 7. 实现发布参数检查
   - 校验视频比例、标题长度、标签数量、封面尺寸
   - 校验 channel account 状态
   - 保存 validation_json
   - _Requirements: US-3_
 
-- [ ] 8. 实现 Channel Adapter 接口
+- [x] 8. 实现 Channel Adapter 接口
   - `uploadVideo`
   - `publish`
   - `getStatus`
@@ -451,4 +451,181 @@
 ### 文档同步
 - 是否更新 `tasks.md`：是，已勾选 Task 5 并追加执行反馈。
 - 是否更新 `plan.md`：是，当前开发游标推进到 `voflow-publish-assistant` Task 6。
+- 是否新增 Change Log / 返修项：否，本轮未改变需求或设计边界。
+
+### Task 6: 实现 OAuth/授权占位接口
+
+### 任务
+- Spec: `voflow-publish-assistant`
+- Task: 6
+- Requirements: US-2
+
+### 修改文件
+- `src/lib/publish/oauth.ts`
+- `src/services/channelOAuthService.ts`
+- `src/services/channelAccountService.ts`
+- `src/app/api/channel-accounts/[platform]/authorize/route.ts`
+- `src/app/api/channel-accounts/[platform]/mock-authorize/route.ts`
+- `tests/channel-oauth-api.test.ts`
+- `.kiro/specs/voflow-publish-assistant/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+- `docs/05-开发进度说明.md`
+
+### 范围说明
+- 本次完成：新增 `GET /api/channel-accounts/[platform]/authorize`，按平台返回授权入口占位信息，包括平台 label、provider、mock 状态、授权 URL 和重新授权 URL。
+- 本次完成：新增 `POST /api/channel-accounts/[platform]/mock-authorize`，为当前 session 的 team/user 创建或覆盖 mock channel account，并复用 `saveChannelAccountToken()` 加密保存 mock token。
+- 本次完成：新增 `src/lib/publish/oauth.ts`，集中维护 mock OAuth provider、授权状态、mock 授权有效期边界和 `ChannelOAuthAdapter` 接口占位。
+- 本次完成：新增 `mockAuthorizeChannelAccount()` service，平台校验复用 `isPublishPlatform()`，账号昵称默认复用平台规则 label，token 过期时间按统一边界生成。
+- 本次完成：token 密钥仍通过 `CHANNEL_TOKEN_ENCRYPTION_SECRET` fail fast；route 不直接保存明文 token，不直接拼平台规则。
+- 明确未完成：本轮不实现真实平台 OAuth、不调用真实开放平台、不实现 upload/publish/getStatus Channel Adapter、一键发布、失败重试、发布参数检查或发布 UI。
+- 是否使用 mock/provider/adapter 占位：是。本轮只实现 mock OAuth 占位和 mock channel account 创建能力，`provider` 明确返回 `mock`，并保留 `ChannelOAuthAdapter` 接口；不得按真实平台授权能力验收。
+
+### 工作区状态
+- 开始前已有未提交改动：`voflow-advanced-editing`、`voflow-packaging-export`、`voflow-publish-assistant` Task 0-5 的实现/测试/文档改动，以及 `src/app/dashboard/voices/page.tsx`、`src/services/workflowWorkerService.ts` 等前序改动。
+- 本任务实际改动：新增 OAuth/mock 授权公共模块、service、两个 API route、Task 6 focused tests，并同步 Task 6 任务状态、总控 plan 和开发进度说明。
+- 未触碰的既有改动：未回滚或重写 advanced-editing、packaging-export、Task 1 schema/migration、Task 2 rules、Task 3 草稿生成、Task 4 草稿查询/编辑、Task 5 渠道账号状态展示、voices page、workflow worker 等前序改动。
+
+### 硬编码检查
+- 是否新增运行时硬编码：未在 API route 散写平台列表、平台文案、token 状态或错误码；mock provider/status/path 和授权有效期边界收口到 `src/lib/publish/oauth.ts`。
+- 新增配置是否收口：未新增 env；继续复用 `CHANNEL_TOKEN_ENCRYPTION_SECRET` 和 `src/lib/publish/token.ts`。
+- 新增错误码/状态/枚举是否收口：平台错误继续复用 `PUBLISH_PLATFORM_UNSUPPORTED`；token 密钥错误继续复用 `CHANNEL_TOKEN_SECRET_MISSING`；mock provider/status 收口到 `CHANNEL_OAUTH_PROVIDER_TYPES` 和 `CHANNEL_OAUTH_STATUS`。
+
+### 公共化检查
+- 复用的公共模块：`src/lib/api-auth.ts`、`src/lib/api-response.ts`、`src/lib/publish/rules.ts`、`src/lib/publish/token.ts`、`src/lib/publish/channel-account.ts`、`src/services/channelAccountService.ts`。
+- 新增的公共函数/service：新增 `serializeMockChannelAuthorization()`、`buildMockAuthorizePath()`、`mockChannelOAuthAdapter`、`getChannelAuthorizationEntry()`、`mockAuthorizeChannelAccount()`。
+- 后续需要抽取的重复逻辑：Task 7 发布参数检查应复用 `getChannelAccountsForUser()`/channel account serializer 判定账号状态；Task 8 应在当前 OAuth adapter 边界基础上新增 `uploadVideo`、`publish`、`getStatus`、`retry` 的 Channel Adapter，不要把 mock OAuth 当成发布 adapter。
+
+### 验证命令
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/vitest run tests/channel-oauth-api.test.ts`: 先 RED，因 `@/app/api/channel-accounts/[platform]/authorize/route` 缺失失败；实现后 GREEN，1 个文件 5 个测试通过。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/vitest run tests/publish-schema.test.ts tests/publish-platform-rules.test.ts tests/publish-draft-llm-provider.test.ts tests/publish-draft-generation-service.test.ts tests/publish-drafts-generate-api.test.ts tests/publish-drafts-api.test.ts tests/channel-token.test.ts tests/channel-accounts-api.test.ts tests/channel-oauth-api.test.ts`: 通过，9 个文件 34 个测试通过。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/next lint`: 通过，0 warning / 0 error。
+- `git diff --check`: 通过。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/next build`: 通过，新 routes `/api/channel-accounts/[platform]/authorize` 和 `/api/channel-accounts/[platform]/mock-authorize` 出现在 build route 列表中。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/tsc --noEmit`: 未通过，剩余失败点为既有测试类型问题，包括 `tests/avatar-detector.test.ts` 缺少 `vi` 导入、`tests/asset-consent.test.ts`/`tests/reference-api.test.ts`/`tests/reference-url-import-worker.test.ts` 的 Prisma JSON 输入类型不匹配、`tests/avatar-ui.test.tsx` fixture 缺少 `SerializedAsset` 字段、`tests/voice-clone-service.test.ts`/`tests/voice-trainer-service.test.ts` 的既有测试类型推断问题；本轮新增 Task 6 文件已不在错误列表中。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 6。
+- 是否满足对应 Acceptance Criteria：满足 US-2/AC1、US-2/AC2、US-2/AC3 的授权占位和重新授权入口基础；mock 授权可创建 connected account，过期账号可通过同一 mock 授权入口覆盖为 connected。
+- 是否允许勾选：允许勾选 Task 6，不允许勾选 Task 7-14。
+- MVP 状态矩阵是否需要同步更新：需要，publish-assistant 已从 6/15 推进到 7/15；第 14 行仍保持 `partial`，因为发布参数检查、发布 Channel Adapter、一键发布、重试和发布 UI 尚未完成。
+
+### 文档同步
+- 是否更新 `tasks.md`：是，已勾选 Task 6 并追加执行反馈。
+- 是否更新 `plan.md`：是，当前开发游标推进到 `voflow-publish-assistant` Task 7。
+- 是否新增 Change Log / 返修项：否，本轮未改变需求或设计边界。
+
+### Task 7: 实现发布参数检查
+
+### 任务
+- Spec: `voflow-publish-assistant`
+- Task: 7
+- Requirements: US-3
+
+### 修改文件
+- `src/lib/publish/rules.ts`
+- `src/lib/publish/validation.ts`
+- `src/services/publishValidationService.ts`
+- `src/app/api/video-jobs/[jobId]/publish/validate/route.ts`
+- `tests/publish-validate-api.test.ts`
+- `.kiro/specs/voflow-publish-assistant/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+- `docs/05-开发进度说明.md`
+
+### 范围说明
+- 本次完成：新增 `POST /api/video-jobs/[jobId]/publish/validate`，支持按请求的 `platforms` 执行发布前参数检查。
+- 本次完成：新增 `src/lib/publish/validation.ts`，集中维护 `PUBLISH_VALIDATION_FAILED`、`CHANNEL_TOKEN_EXPIRED`、`CHANNEL_ACCOUNT_NOT_CONNECTED`、标题/标签/封面/最终视频等检查码和 validation payload 类型。
+- 本次完成：新增 `validatePublishParameters()` service，校验标题长度、标签数量、封面比例、最终视频是否存在、视频比例、视频时长和渠道账号授权状态。
+- 本次完成：检查结果会写回对应 `publish_drafts.validationJson`，为后续一键发布 API 提供稳定前置条件。
+- 本次完成：扩展 `src/lib/publish/rules.ts` 的 `video.allowedAspectRatios`，视频比例规则继续收口在平台规则模块中，validator 不散写平台比例。
+- 明确未完成：本轮不实现 Channel Adapter、上传/发布/状态查询、发布任务创建、一键发布、失败重试或发布 UI。
+- 是否使用 mock/provider/adapter 占位：否。本轮新增的是真实 DB/API/service 校验逻辑；测试使用本地数据库 fixture，不新增发布 adapter。
+
+### 工作区状态
+- 开始前已有未提交改动：`voflow-advanced-editing`、`voflow-packaging-export`、`voflow-publish-assistant` Task 0-6 的实现/测试/文档改动，以及 `src/app/dashboard/voices/page.tsx`、`src/services/workflowWorkerService.ts` 等前序改动。
+- 本任务实际改动：新增发布参数检查公共类型、service、API route、Task 7 focused tests，并同步 Task 7 任务状态、总控 plan 和开发进度说明。
+- 未触碰的既有改动：未回滚或重写 advanced-editing、packaging-export、Task 1 schema/migration、Task 2 rules 基础配置、Task 3 草稿生成、Task 4 草稿查询/编辑、Task 5 渠道账号状态展示、Task 6 OAuth/mock 授权占位、voices page、workflow worker 等前序改动。
+
+### 硬编码检查
+- 是否新增运行时硬编码：未在 API route 或 validator 散写平台列表、标题长度、标签数量、封面比例、视频比例、视频时长或账号状态文案；平台限制复用 `src/lib/publish/rules.ts`，检查码收口到 `src/lib/publish/validation.ts`。
+- 新增配置是否收口：新增 `video.allowedAspectRatios` 已收口到 `PUBLISH_PLATFORM_RULES`；本轮未新增 env。
+- 新增错误码/状态/枚举是否收口：新增发布检查相关 code 已收口到 `PUBLISH_VALIDATION_ERROR_CODES` 和 `PUBLISH_VALIDATION_CHECK_CODES`；未新增 Prisma enum。
+
+### 公共化检查
+- 复用的公共模块：`src/lib/api-auth.ts`、`src/lib/api-response.ts`、`src/lib/publish/rules.ts`、`src/lib/publish/serializer.ts`、`src/lib/publish/channel-account.ts`、`src/services/channelAccountService.ts`。
+- 新增的公共函数/service：新增 `validatePublishParameters()`，以及 `PublishValidationPayload` / `PublishPlatformValidationResult` / `PublishValidationCheck` 类型。
+- 后续需要抽取的重复逻辑：Task 8 Channel Adapter 应消费 `publish_drafts.validationJson` 和当前 validation check code，不要在 adapter 中重新检查标题、标签、封面、视频和账号状态。
+
+### 验证命令
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/vitest run tests/publish-validate-api.test.ts`: 先 RED，因 `@/app/api/video-jobs/[jobId]/publish/validate/route` 缺失失败；实现后 GREEN，1 个文件 4 个测试通过。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/vitest run tests/publish-schema.test.ts tests/publish-platform-rules.test.ts tests/publish-draft-llm-provider.test.ts tests/publish-draft-generation-service.test.ts tests/publish-drafts-generate-api.test.ts tests/publish-drafts-api.test.ts tests/channel-token.test.ts tests/channel-accounts-api.test.ts tests/channel-oauth-api.test.ts tests/publish-validate-api.test.ts`: 通过，10 个文件 38 个测试通过。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/next lint`: 通过，0 warning / 0 error。
+- `git diff --check`: 通过。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/next build`: 通过，新 route `/api/video-jobs/[jobId]/publish/validate` 出现在 build route 列表中。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/tsc --noEmit`: 未通过，剩余失败点为既有测试类型问题，包括 `tests/avatar-detector.test.ts` 缺少 `vi` 导入、`tests/asset-consent.test.ts`/`tests/reference-api.test.ts`/`tests/reference-url-import-worker.test.ts` 的 Prisma JSON 输入类型不匹配、`tests/avatar-ui.test.tsx` fixture 缺少 `SerializedAsset` 字段、`tests/voice-clone-service.test.ts`/`tests/voice-trainer-service.test.ts` 的既有测试类型推断问题；本轮新增 Task 7 文件已不在错误列表中。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 7。
+- 是否满足对应 Acceptance Criteria：满足 US-3/AC1 和 US-3/AC2；发布前检查可校验视频比例、标题长度、标签数量、封面比例/尺寸元数据和授权状态，失败时返回 `PUBLISH_VALIDATION_FAILED` 并展示逐项原因。
+- 是否允许勾选：允许勾选 Task 7，不允许勾选 Task 8-14。
+- MVP 状态矩阵是否需要同步更新：需要，publish-assistant 已从 7/15 推进到 8/15；第 14 行仍保持 `partial`，因为发布 Channel Adapter、一键发布、重试和发布 UI 尚未完成。
+
+### 文档同步
+- 是否更新 `tasks.md`：是，已勾选 Task 7 并追加执行反馈。
+- 是否更新 `plan.md`：是，当前开发游标推进到 `voflow-publish-assistant` Task 8。
+- 是否新增 Change Log / 返修项：否，本轮未改变需求或设计边界。
+
+### Task 8: 实现 Channel Adapter 接口
+
+### 任务
+- Spec: `voflow-publish-assistant`
+- Task: 8
+- Requirements: US-4
+
+### 修改文件
+- `src/lib/publish/channel-adapter.ts`
+- `tests/publish-channel-adapter.test.ts`
+- `.kiro/specs/voflow-publish-assistant/tasks.md`
+- `.kiro/plans/voflow-platform/plan.md`
+- `docs/05-开发进度说明.md`
+
+### 范围说明
+- 本次完成：新增 `PublishChannelAdapter` 接口，包含 `uploadVideo()`、`publish()`、`getStatus()`、`retry()` 四个方法。
+- 本次完成：新增 `createMockChannelAdapter()` 和 `getChannelAdapter()`，当前统一返回 mock adapter，为后续真实平台 adapter 保留统一接口边界。
+- 本次完成：mock adapter 消费已通过的 `validationJson`、final video artifact id、channel account id、草稿标题/标签/封面等发布输入，并返回稳定的 mock request id、remote video id、remote publish id 和 published 状态。
+- 本次完成：新增 `PUBLISH_ADAPTER_ERROR_CODES`，收口 `PUBLISH_VALIDATION_FAILED`、`PUBLISH_UPLOAD_FAILED`、`PUBLISH_REMOTE_FAILED` 等 Adapter 层错误码。
+- 明确未完成：本轮不创建 publish 任务、不写入 `publishes`、不实现一键发布 API、不实现失败重试 API、不实现真实开放平台上传/发布/状态查询、不实现发布 UI。
+- 是否使用 mock/provider/adapter 占位：是。本轮只实现 mock channel adapter 和可插拔接口，不能按真实平台发布能力验收。
+
+### 工作区状态
+- 开始前已有未提交改动：`voflow-advanced-editing`、`voflow-packaging-export`、`voflow-publish-assistant` Task 0-7 的实现/测试/文档改动，以及 `src/app/dashboard/voices/page.tsx`、`src/services/workflowWorkerService.ts` 等前序改动。
+- 本任务实际改动：新增 channel adapter 公共模块、mock adapter、Task 8 focused tests，并同步 Task 8 任务状态、总控 plan 和开发进度说明。
+- 未触碰的既有改动：未回滚或重写 advanced-editing、packaging-export、Task 1 schema/migration、Task 2 rules、Task 3 草稿生成、Task 4 草稿查询/编辑、Task 5 渠道账号状态展示、Task 6 OAuth/mock 授权占位、Task 7 发布参数检查、voices page、workflow worker 等前序改动。
+
+### 硬编码检查
+- 是否新增运行时硬编码：未在 API、Worker 或 UI 散写平台规则、发布状态文案或错误码；Adapter provider、remote status 和错误码收口到 `src/lib/publish/channel-adapter.ts`。
+- 新增配置是否收口：本轮未新增 env；mock adapter 不读取外部服务地址、密钥或平台开放接口。
+- 新增错误码/状态/枚举是否收口：新增 `PUBLISH_ADAPTER_ERROR_CODES`、`PUBLISH_ADAPTER_REMOTE_STATUSES`、`PUBLISH_CHANNEL_ADAPTER_PROVIDERS`，均收口在 channel adapter 公共模块；未新增 Prisma enum。
+
+### 公共化检查
+- 复用的公共模块：`src/lib/publish/rules.ts`、`src/lib/publish/validation.ts`。
+- 新增的公共函数/service：新增 `getChannelAdapter()`、`createMockChannelAdapter()`、`isSuccessfulAdapterResult()` 和 `PublishChannelAdapter` 相关类型。
+- 后续需要抽取的重复逻辑：Task 9 一键发布 API 应复用 `getChannelAdapter()` 和 Adapter result 类型，不要在 publish API 中手写 mock request id、remote id 或发布状态映射；Task 10 重试 API 应复用 `adapter.retry()`。
+
+### 验证命令
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/vitest run tests/publish-channel-adapter.test.ts`: 先 RED，因 `@/lib/publish/channel-adapter` 缺失失败；实现后 GREEN，1 个文件 4 个测试通过。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/vitest run tests/publish-schema.test.ts tests/publish-platform-rules.test.ts tests/publish-draft-llm-provider.test.ts tests/publish-draft-generation-service.test.ts tests/publish-drafts-generate-api.test.ts tests/publish-drafts-api.test.ts tests/channel-token.test.ts tests/channel-accounts-api.test.ts tests/channel-oauth-api.test.ts tests/publish-validate-api.test.ts tests/publish-channel-adapter.test.ts`: 通过，11 个文件 42 个测试通过。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/next lint`: 通过，0 warning / 0 error。
+- `git diff --check`: 通过。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/next build`: 通过。
+- `PATH="/Users/qianduoduo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" node_modules/.bin/tsc --noEmit`: 未通过，剩余失败点为既有测试类型问题，包括 `tests/avatar-detector.test.ts` 缺少 `vi` 导入、`tests/asset-consent.test.ts`/`tests/reference-api.test.ts`/`tests/reference-url-import-worker.test.ts` 的 Prisma JSON 输入类型不匹配、`tests/avatar-ui.test.tsx` fixture 缺少 `SerializedAsset` 字段、`tests/voice-clone-service.test.ts`/`tests/voice-trainer-service.test.ts` 的既有测试类型推断问题；本轮新增 Task 8 文件已不在错误列表中。
+
+### 验收结论
+- 是否满足当前 task：满足 Task 8。
+- 是否满足对应 Acceptance Criteria：满足 US-4 后续一键发布/状态查询/重试所需的 Adapter 边界基础；mock adapter 已覆盖上传、发布、查询状态和重试四个方法。
+- 是否允许勾选：允许勾选 Task 8，不允许勾选 Task 9-14。
+- MVP 状态矩阵是否需要同步更新：需要，publish-assistant 已从 8/15 推进到 9/15；第 14 行仍保持 `partial`，因为一键发布 API、失败重试 API 和发布 UI 尚未完成，且当前 adapter 仍是 mock。
+
+### 文档同步
+- 是否更新 `tasks.md`：是，已勾选 Task 8 并追加执行反馈。
+- 是否更新 `plan.md`：是，当前开发游标推进到 `voflow-publish-assistant` Task 9。
 - 是否新增 Change Log / 返修项：否，本轮未改变需求或设计边界。

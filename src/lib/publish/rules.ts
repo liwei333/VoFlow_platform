@@ -33,6 +33,7 @@ export interface PublishCoverRule {
 }
 
 export interface PublishVideoRule {
+  allowedAspectRatios: readonly PublishAspectRatio[];
   minDurationSeconds: number;
   maxDurationSeconds: number;
 }
@@ -56,7 +57,11 @@ export const PUBLISH_PLATFORM_RULES: Record<PublishPlatform, PublishPlatformRule
       allowedAspectRatios: ["9:16", "16:9"],
       recommendedAspectRatio: "9:16",
     },
-    video: { minDurationSeconds: 1, maxDurationSeconds: 900 },
+    video: {
+      allowedAspectRatios: ["9:16", "16:9"],
+      minDurationSeconds: 1,
+      maxDurationSeconds: 900,
+    },
   },
   kuaishou: {
     platform: "kuaishou",
@@ -67,7 +72,11 @@ export const PUBLISH_PLATFORM_RULES: Record<PublishPlatform, PublishPlatformRule
       allowedAspectRatios: ["9:16", "16:9"],
       recommendedAspectRatio: "9:16",
     },
-    video: { minDurationSeconds: 1, maxDurationSeconds: 600 },
+    video: {
+      allowedAspectRatios: ["9:16", "16:9"],
+      minDurationSeconds: 1,
+      maxDurationSeconds: 600,
+    },
   },
   xiaohongshu: {
     platform: "xiaohongshu",
@@ -78,7 +87,11 @@ export const PUBLISH_PLATFORM_RULES: Record<PublishPlatform, PublishPlatformRule
       allowedAspectRatios: ["3:4", "1:1", "4:3", "9:16"],
       recommendedAspectRatio: "3:4",
     },
-    video: { minDurationSeconds: 1, maxDurationSeconds: 300 },
+    video: {
+      allowedAspectRatios: ["9:16", "1:1", "3:4"],
+      minDurationSeconds: 1,
+      maxDurationSeconds: 300,
+    },
   },
   wechat_channels: {
     platform: "wechat_channels",
@@ -89,7 +102,11 @@ export const PUBLISH_PLATFORM_RULES: Record<PublishPlatform, PublishPlatformRule
       allowedAspectRatios: ["9:16", "16:9"],
       recommendedAspectRatio: "9:16",
     },
-    video: { minDurationSeconds: 1, maxDurationSeconds: 1800 },
+    video: {
+      allowedAspectRatios: ["9:16", "16:9"],
+      minDurationSeconds: 1,
+      maxDurationSeconds: 1800,
+    },
   },
   bilibili: {
     platform: "bilibili",
@@ -100,7 +117,11 @@ export const PUBLISH_PLATFORM_RULES: Record<PublishPlatform, PublishPlatformRule
       allowedAspectRatios: ["16:10", "16:9"],
       recommendedAspectRatio: "16:10",
     },
-    video: { minDurationSeconds: 1, maxDurationSeconds: 7200 },
+    video: {
+      allowedAspectRatios: ["16:9", "16:10"],
+      minDurationSeconds: 1,
+      maxDurationSeconds: 7200,
+    },
   },
   youtube_shorts: {
     platform: "youtube_shorts",
@@ -111,7 +132,11 @@ export const PUBLISH_PLATFORM_RULES: Record<PublishPlatform, PublishPlatformRule
       allowedAspectRatios: ["9:16", "1:1"],
       recommendedAspectRatio: "9:16",
     },
-    video: { minDurationSeconds: 1, maxDurationSeconds: 180 },
+    video: {
+      allowedAspectRatios: ["9:16", "1:1"],
+      minDurationSeconds: 1,
+      maxDurationSeconds: 180,
+    },
   },
   tiktok: {
     platform: "tiktok",
@@ -122,7 +147,11 @@ export const PUBLISH_PLATFORM_RULES: Record<PublishPlatform, PublishPlatformRule
       allowedAspectRatios: ["9:16"],
       recommendedAspectRatio: "9:16",
     },
-    video: { minDurationSeconds: 1, maxDurationSeconds: 600 },
+    video: {
+      allowedAspectRatios: ["9:16"],
+      minDurationSeconds: 1,
+      maxDurationSeconds: 600,
+    },
   },
 } as const;
 

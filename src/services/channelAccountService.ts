@@ -7,12 +7,14 @@ import {
 } from "@/lib/publish/channel-account";
 import { PUBLISH_PLATFORMS, type PublishPlatform } from "@/lib/publish/rules";
 import {
+  CHANNEL_TOKEN_ERROR_CODES,
   encryptChannelToken,
   requireChannelTokenSecret,
-  type ChannelTokenErrorCode,
+  type ChannelTokenEnv,
 } from "@/lib/publish/token";
 
-export type SaveChannelAccountTokenErrorCode = ChannelTokenErrorCode;
+export type SaveChannelAccountTokenErrorCode =
+  typeof CHANNEL_TOKEN_ERROR_CODES.missingSecret;
 
 export interface GetChannelAccountsInput {
   teamId: string;
@@ -32,7 +34,7 @@ export interface SaveChannelAccountTokenInput {
 
 export interface SaveChannelAccountTokenOptions {
   tokenSecret?: string;
-  env?: Pick<NodeJS.ProcessEnv, "CHANNEL_TOKEN_ENCRYPTION_SECRET">;
+  env?: ChannelTokenEnv;
 }
 
 export type GetChannelAccountsResult = {
@@ -108,7 +110,7 @@ export async function saveChannelAccountToken(
     return {
       success: false,
       error: {
-        code: "CHANNEL_TOKEN_SECRET_MISSING",
+        code: CHANNEL_TOKEN_ERROR_CODES.missingSecret,
         message: error instanceof Error ? error.message : "缺少渠道 token 加密密钥",
       },
     };
