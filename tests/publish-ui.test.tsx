@@ -245,6 +245,154 @@ describe("Publish draft UI", () => {
     expect(html).toContain("重试");
   });
 
+  it("renders real provider account details and remote publish status", () => {
+    const accounts: SerializedChannelAccount[] = [
+      {
+        id: "acct_youtube",
+        platform: "youtube_shorts",
+        platformLabel: "YouTube Shorts",
+        provider: "youtube",
+        providerAccountId: "channel-123",
+        status: "connected",
+        statusLabel: "已授权",
+        accountName: "VoFlow Studio",
+        scopes: [
+          "https://www.googleapis.com/auth/youtube.upload",
+          "https://www.googleapis.com/auth/youtube.readonly",
+        ],
+        metadata: { thumbnailUrl: "https://example.com/avatar.png" },
+        expiresAt: "2026-07-01T00:00:00.000Z",
+        lastAuthorizedAt: "2026-06-26T00:00:00.000Z",
+        lastRefreshAt: "2026-06-26T01:00:00.000Z",
+        lastErrorJson: null,
+        requiresAuth: false,
+        createdAt: "2026-06-26T00:00:00.000Z",
+        updatedAt: "2026-06-26T01:00:00.000Z",
+      },
+      {
+        id: "acct_mock",
+        platform: "douyin",
+        platformLabel: "抖音",
+        provider: "mock",
+        providerAccountId: null,
+        status: "connected",
+        statusLabel: "已授权",
+        accountName: "本地测试号",
+        scopes: [],
+        metadata: null,
+        expiresAt: null,
+        lastAuthorizedAt: null,
+        lastRefreshAt: null,
+        lastErrorJson: null,
+        requiresAuth: false,
+        createdAt: "2026-06-26T00:00:00.000Z",
+        updatedAt: "2026-06-26T00:00:00.000Z",
+      },
+      {
+        id: "acct_expired",
+        platform: "xiaohongshu",
+        platformLabel: "小红书",
+        provider: "youtube",
+        providerAccountId: "channel-expired",
+        status: "expired",
+        statusLabel: "授权已过期",
+        accountName: "过期账号",
+        scopes: ["https://www.googleapis.com/auth/youtube.upload"],
+        metadata: null,
+        expiresAt: "2026-06-01T00:00:00.000Z",
+        lastAuthorizedAt: "2026-05-26T00:00:00.000Z",
+        lastRefreshAt: null,
+        lastErrorJson: {
+          code: "CHANNEL_TOKEN_REFRESH_FAILED",
+          message: "refresh token 已失效",
+        },
+        requiresAuth: true,
+        createdAt: "2026-05-26T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ];
+    const publishes: SerializedPublish[] = [
+      {
+        id: "publish_youtube",
+        jobId: "job_1",
+        publishDraftId: "draft_youtube",
+        channelAccountId: "acct_youtube",
+        platform: "youtube_shorts",
+        status: "published",
+        requestId: "upload-session-1",
+        remoteId: "youtube-video-1",
+        remoteUrl: "https://www.youtube.com/watch?v=youtube-video-1",
+        remoteStatus: { uploadStatus: "processed", privacyStatus: "private" },
+        lastSyncedAt: "2026-06-26T02:00:00.000Z",
+        attemptsJson: null,
+        errorJson: null,
+        createdAt: "2026-06-26T01:30:00.000Z",
+        updatedAt: "2026-06-26T02:00:00.000Z",
+      },
+      {
+        id: "publish_failed",
+        jobId: "job_1",
+        publishDraftId: "draft_youtube_failed",
+        channelAccountId: "acct_youtube",
+        platform: "youtube_shorts",
+        status: "failed",
+        requestId: "upload-session-2",
+        remoteId: null,
+        remoteUrl: null,
+        remoteStatus: { uploadStatus: "failed" },
+        lastSyncedAt: null,
+        attemptsJson: null,
+        errorJson: {
+          code: "PUBLISH_REAL_PLATFORM_NOT_CONFIGURED",
+          message: "缺少 YouTube OAuth 配置",
+        },
+        createdAt: "2026-06-26T01:40:00.000Z",
+        updatedAt: "2026-06-26T01:41:00.000Z",
+      },
+    ];
+
+    const html = renderToStaticMarkup(
+      <PublishCenterPanel
+        accounts={accounts}
+        validationResults={[]}
+        publishes={publishes}
+        selectedPlatforms={["youtube_shorts"]}
+        scheduleAt=""
+        checking={false}
+        publishing={false}
+        exportingMp4={false}
+        retryingPublishId={null}
+        authorizingPlatform={null}
+        onScheduleAtChange={vi.fn()}
+        onRefreshAccounts={vi.fn()}
+        onAuthorize={vi.fn()}
+        onValidate={vi.fn()}
+        onSaveDrafts={vi.fn()}
+        onExportMp4={vi.fn()}
+        onPublish={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    );
+
+    expect(html).toContain("provider: youtube");
+    expect(html).toContain("channel-123");
+    expect(html).toContain("youtube.upload");
+    expect(html).toContain("最近授权");
+    expect(html).toContain("最近刷新");
+    expect(html).toContain("Mock adapter");
+    expect(html).toContain("refresh token 已失效");
+    expect(html).toContain("重新授权");
+    expect(html).toContain("https://www.youtube.com/watch?v=youtube-video-1");
+    expect(html).toContain("processed");
+    expect(html).toContain("private");
+    expect(html).toContain("最近同步");
+    expect(html).toContain("upload-session-1");
+    expect(html).toContain("youtube-video-1");
+    expect(html).toContain("PUBLISH_REAL_PLATFORM_NOT_CONFIGURED");
+    expect(html).toContain("检查真实发布配置");
+    expect(html).toContain("刷新远端状态");
+  });
+
   it("maps publish statuses to user-facing labels", () => {
     expect(getPublishStatusLabel("published")).toBe("已发布");
     expect(getPublishStatusLabel("failed")).toBe("发布失败");

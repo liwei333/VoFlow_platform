@@ -211,6 +211,58 @@ describe("real channel OAuth service", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("returns a sanitized exchange error without saving a channel account", async () => {
+    const authorization = getChannelAuthorizationEntry(
+      {
+        platform: "youtube_shorts",
+        teamId,
+        userId,
+      },
+      { env: realOAuthEnv }
+    );
+    const state = new URL(
+      authorization.success ? authorization.data.authorization.authorizationUrl : ""
+    ).searchParams.get("state")!;
+    const fetchImpl = vi.fn().mockResolvedValueOnce(
+      jsonResponse(
+        {
+          error: "invalid_grant",
+          error_description:
+            "callback-code youtube-client-secret youtube-access-token",
+        },
+        400
+      )
+    );
+
+    const result = await handleChannelOAuthCallback(
+      {
+        platform: "youtube_shorts",
+        teamId,
+        userId,
+        code: "callback-code",
+        state,
+      },
+      {
+        env: realOAuthEnv,
+        fetchImpl,
+      }
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "CHANNEL_OAUTH_EXCHANGE_FAILED",
+        message: "渠道授权换取 token 失败",
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("callback-code");
+    expect(JSON.stringify(result)).not.toContain("youtube-client-secret");
+    expect(JSON.stringify(result)).not.toContain("youtube-access-token");
+    await expect(
+      prisma.channelAccount.count({ where: { teamId, userId } })
+    ).resolves.toBe(0);
+  });
+
   it("refreshes an expired real channel token without leaking token values", async () => {
     await handleSavedRealAccount();
     const fetchImpl = vi.fn().mockResolvedValueOnce(
@@ -253,6 +305,55 @@ describe("real channel OAuth service", () => {
     expect(decryptChannelToken(saved.encryptedRefreshToken!, TEST_SECRET)).toBe(
       "youtube-refresh-token"
     );
+  });
+
+  it("marks the account expired with a sanitized refresh error", async () => {
+    await handleSavedRealAccount();
+    const fetchImpl = vi.fn().mockResolvedValueOnce(
+      jsonResponse(
+        {
+          error: "invalid_grant",
+          error_description: "youtube-refresh-token youtube-client-secret",
+        },
+        400
+      )
+    );
+
+    const result = await refreshChannelAccountToken(
+      {
+        platform: "youtube_shorts",
+        teamId,
+        userId,
+      },
+      {
+        env: realOAuthEnv,
+        fetchImpl,
+        now: new Date("2026-06-26T01:00:00.000Z"),
+      }
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "CHANNEL_TOKEN_REFRESH_FAILED",
+        message: "渠道 token 刷新失败",
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("youtube-refresh-token");
+    expect(JSON.stringify(result)).not.toContain("youtube-client-secret");
+
+    const saved = await prisma.channelAccount.findFirstOrThrow({
+      where: {
+        teamId,
+        userId,
+        platform: "youtube_shorts",
+      },
+    });
+    expect(saved.status).toBe("expired");
+    expect(saved.lastErrorJson).toEqual({
+      code: "CHANNEL_TOKEN_REFRESH_FAILED",
+      message: "渠道 token 刷新失败",
+    });
   });
 
   async function handleSavedRealAccount() {

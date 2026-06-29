@@ -109,4 +109,19 @@ describe("publish real platform config", () => {
       );
     }
   });
+
+  it("fails fast for non-YouTube platforms when real publish forbids mock fallback", () => {
+    expect(() =>
+      getChannelAdapter("douyin", {
+        PUBLISH_REAL_ADAPTER_ENABLED: "true",
+        PUBLISH_REAL_PROVIDER: "youtube",
+        PUBLISH_ALLOW_MOCK_ADAPTER: "false",
+        CHANNEL_TOKEN_ENCRYPTION_SECRET: "secret",
+        YOUTUBE_CLIENT_ID: "client-id",
+        YOUTUBE_CLIENT_SECRET: "client-secret",
+        YOUTUBE_REDIRECT_URI:
+          "http://localhost:3000/api/channel-accounts/youtube_shorts/oauth/callback",
+      })
+    ).toThrow(PublishRealPlatformConfigError);
+  });
 });

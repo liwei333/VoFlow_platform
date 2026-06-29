@@ -203,10 +203,16 @@ describe("real publish adapter and status sync", () => {
   });
 
   it("rejects final_video resolution across teams", async () => {
-    const result = await resolveFinalVideoArtifact({
-      teamId: otherTeamId,
-      jobId,
-    });
+    const downloadObject = vi.fn(async () => Readable.from([Buffer.from("mp4")]));
+    const result = await resolveFinalVideoArtifact(
+      {
+        teamId: otherTeamId,
+        jobId,
+      },
+      {
+        downloadObject,
+      }
+    );
 
     expect(result).toEqual({
       success: false,
@@ -215,6 +221,7 @@ describe("real publish adapter and status sync", () => {
         message: "最终 MP4 产物不存在",
       },
     });
+    expect(downloadObject).not.toHaveBeenCalled();
   });
 
   it("uploads a YouTube video with resumable upload and stable remote ids", async () => {
@@ -393,6 +400,55 @@ describe("real publish adapter and status sync", () => {
     expect(saved.remoteStatus).toMatchObject({
       uploadStatus: "processed",
       privacyStatus: "private",
+    });
+  });
+
+  it("stores a sanitized status sync failure without leaking token values", async () => {
+    const adapter = {
+      platform: "youtube_shorts" as const,
+      provider: "youtube" as const,
+      isMock: false,
+      uploadVideo: vi.fn(),
+      publish: vi.fn(),
+      retry: vi.fn(),
+      getStatus: vi.fn().mockResolvedValueOnce({
+        success: false,
+        error: {
+          code: "PUBLISH_STATUS_SYNC_FAILED",
+          message:
+            "remote rejected Bearer youtube-access-token youtube-client-secret",
+        },
+      }),
+    };
+
+    const result = await syncPublishStatus(
+      {
+        publishId,
+        teamId,
+        userId,
+        now: new Date("2026-06-26T02:30:00.000Z"),
+      },
+      {
+        adapter,
+      }
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "PUBLISH_STATUS_SYNC_FAILED",
+        message: "发布状态同步失败",
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("youtube-access-token");
+    expect(JSON.stringify(result)).not.toContain("youtube-client-secret");
+
+    const saved = await prisma.publish.findUniqueOrThrow({ where: { id: publishId } });
+    expect(saved.status).toBe("failed");
+    expect(saved.lastSyncedAt?.toISOString()).toBe("2026-06-26T02:30:00.000Z");
+    expect(saved.errorJson).toEqual({
+      code: "PUBLISH_STATUS_SYNC_FAILED",
+      message: "发布状态同步失败",
     });
   });
 

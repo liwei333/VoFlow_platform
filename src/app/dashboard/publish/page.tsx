@@ -33,6 +33,7 @@ export default function PublishPage() {
   const [exportingMp4, setExportingMp4] = useState(false);
   const [savingDraftId, setSavingDraftId] = useState<string | null>(null);
   const [retryingPublishId, setRetryingPublishId] = useState<string | null>(null);
+  const [syncingPublishId, setSyncingPublishId] = useState<string | null>(null);
   const [authorizingPlatform, setAuthorizingPlatform] = useState<PublishPlatform | null>(
     null
   );
@@ -278,7 +279,25 @@ export default function PublishPage() {
     setNoticeMessage("");
 
     try {
-      const response = await fetch(`/api/channel-accounts/${platform}/mock-authorize`, {
+      const authorizationResponse = await fetch(`/api/channel-accounts/${platform}/authorize`);
+      const authorizationBody = (await authorizationResponse.json()) as ApiResponse<{
+        authorization: {
+          authorizationUrl: string;
+          isMock: boolean;
+        };
+      }>;
+
+      if (authorizationBody.code !== "SUCCESS" || !authorizationBody.data) {
+        setErrorMessage(authorizationBody.message || "渠道授权入口加载失败");
+        return;
+      }
+
+      if (!authorizationBody.data.authorization.isMock) {
+        window.location.href = authorizationBody.data.authorization.authorizationUrl;
+        return;
+      }
+
+      const response = await fetch(authorizationBody.data.authorization.authorizationUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -305,6 +324,38 @@ export default function PublishPage() {
       setErrorMessage("渠道授权失败");
     } finally {
       setAuthorizingPlatform(null);
+    }
+  }
+
+  async function handleSyncPublish(publishId: string) {
+    setSyncingPublishId(publishId);
+    setErrorMessage("");
+    setNoticeMessage("");
+
+    try {
+      const response = await fetch(`/api/publishes/${publishId}/sync`, {
+        method: "POST",
+      });
+      const body = (await response.json()) as ApiResponse<{
+        publish: SerializedPublish;
+      }>;
+
+      if (body.code !== "SUCCESS" || !body.data) {
+        setErrorMessage(body.message || "发布状态同步失败");
+        return;
+      }
+
+      setPublishes((current) =>
+        current.map((publish) =>
+          publish.id === publishId ? body.data!.publish : publish
+        )
+      );
+      setNoticeMessage("发布状态已同步");
+    } catch (error) {
+      console.error("Failed to sync publish status:", error);
+      setErrorMessage("发布状态同步失败");
+    } finally {
+      setSyncingPublishId(null);
     }
   }
 
@@ -400,6 +451,7 @@ export default function PublishPage() {
         publishing={publishing}
         exportingMp4={exportingMp4}
         retryingPublishId={retryingPublishId}
+        syncingPublishId={syncingPublishId}
         authorizingPlatform={authorizingPlatform}
         onScheduleAtChange={setScheduleAt}
         onRefreshAccounts={loadAccounts}
@@ -409,6 +461,7 @@ export default function PublishPage() {
         onExportMp4={handleExportMp4Only}
         onPublish={handleCreatePublishes}
         onRetry={handleRetryPublish}
+        onSyncPublish={handleSyncPublish}
       />
 
       <PublishDraftEditor

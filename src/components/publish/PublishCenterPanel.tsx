@@ -5,9 +5,12 @@ import type { SerializedPublish } from "@/lib/publish/publish";
 import type { PublishPlatform } from "@/lib/publish/rules";
 import {
   PUBLISH_ACTION_LABELS,
+  getPublishErrorActionLabel,
   getPublishPlatformDisplayName,
   getPublishStatusLabel,
   getPublishStatusTone,
+  summarizePublishScopes,
+  summarizeRemoteStatus,
   summarizePublishValidationResults,
 } from "@/lib/publish/ui";
 import type { PublishPlatformValidationResult } from "@/lib/publish/validation";
@@ -22,6 +25,7 @@ export interface PublishCenterPanelProps {
   publishing: boolean;
   exportingMp4: boolean;
   retryingPublishId: string | null;
+  syncingPublishId?: string | null;
   authorizingPlatform: PublishPlatform | null;
   onScheduleAtChange: (value: string) => void;
   onRefreshAccounts: () => void;
@@ -31,6 +35,7 @@ export interface PublishCenterPanelProps {
   onExportMp4: () => void;
   onPublish: () => void;
   onRetry: (publishId: string) => void;
+  onSyncPublish?: (publishId: string) => void;
 }
 
 export function PublishCenterPanel({
@@ -43,6 +48,7 @@ export function PublishCenterPanel({
   publishing,
   exportingMp4,
   retryingPublishId,
+  syncingPublishId,
   authorizingPlatform,
   onScheduleAtChange,
   onRefreshAccounts,
@@ -52,6 +58,7 @@ export function PublishCenterPanel({
   onExportMp4,
   onPublish,
   onRetry,
+  onSyncPublish,
 }: PublishCenterPanelProps) {
   const platformLabels = buildPlatformLabels(accounts, validationResults);
   const validationSummary = summarizePublishValidationResults(validationResults);
@@ -106,6 +113,28 @@ export function PublishCenterPanel({
                             : "border-gray-200 bg-white text-gray-600"
                       }
                     />
+                  </div>
+                  <div className="mt-3 grid gap-1 text-xs text-gray-500">
+                    <span>provider: {account.provider ?? "mock"}</span>
+                    {account.provider === "mock" && (
+                      <span className="font-medium text-amber-700">Mock adapter</span>
+                    )}
+                    {account.providerAccountId && (
+                      <span>providerAccountId: {account.providerAccountId}</span>
+                    )}
+                    <span>scope: {summarizePublishScopes(account.scopes ?? [])}</span>
+                    {account.lastAuthorizedAt && (
+                      <span>最近授权 {formatDate(account.lastAuthorizedAt)}</span>
+                    )}
+                    {account.lastRefreshAt && (
+                      <span>最近刷新 {formatDate(account.lastRefreshAt)}</span>
+                    )}
+                    {account.lastErrorJson !== null &&
+                      account.lastErrorJson !== undefined && (
+                        <span className="text-red-700">
+                          {readPublishErrorMessage(account.lastErrorJson)}
+                        </span>
+                      )}
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <span className="text-xs text-gray-500">
@@ -248,24 +277,63 @@ export function PublishCenterPanel({
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
                       <span>requestId: {publish.requestId || "-"}</span>
                       <span>remoteId: {publish.remoteId || "-"}</span>
-                      <span>{formatDate(publish.updatedAt)}</span>
+                      <span>更新 {formatDate(publish.updatedAt)}</span>
+                      <span>最近同步 {publish.lastSyncedAt ? formatDate(publish.lastSyncedAt) : "-"}</span>
+                    </div>
+                    <div className="mt-2 grid gap-1 text-xs text-gray-500">
+                      <span>remoteStatus: {summarizeRemoteStatus(publish.remoteStatus)}</span>
+                      {publish.remoteUrl && (
+                        <a
+                          href={publish.remoteUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="break-all text-blue-700 underline underline-offset-2"
+                        >
+                          {publish.remoteUrl}
+                        </a>
+                      )}
                     </div>
                     {publish.errorJson !== null && publish.errorJson !== undefined && (
-                      <div className="mt-2 text-xs text-red-700">
-                        {readPublishErrorMessage(publish.errorJson)}
+                      <div className="mt-2 space-y-1 text-xs text-red-700">
+                        <div>{readPublishErrorMessage(publish.errorJson)}</div>
+                        {readPublishErrorCode(publish.errorJson) && (
+                          <div>{readPublishErrorCode(publish.errorJson)}</div>
+                        )}
                       </div>
                     )}
                   </div>
-                  {publish.status === "failed" && (
-                    <button
-                      type="button"
-                      onClick={() => onRetry(publish.id)}
-                      disabled={retryingPublishId === publish.id}
-                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                    >
-                      {retryingPublishId === publish.id ? "重试中..." : PUBLISH_ACTION_LABELS.retry}
-                    </button>
-                  )}
+                  <div className="flex w-full flex-col gap-2 sm:w-auto">
+                    {publish.status === "failed" && (
+                      <button
+                        type="button"
+                        onClick={() => onRetry(publish.id)}
+                        disabled={retryingPublishId === publish.id}
+                        className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                      >
+                        {retryingPublishId === publish.id
+                          ? "重试中..."
+                          : (getPublishErrorActionLabel(readPublishErrorCode(publish.errorJson)) ??
+                            PUBLISH_ACTION_LABELS.retry)}
+                      </button>
+                    )}
+                    {onSyncPublish && (
+                      <button
+                        type="button"
+                        onClick={() => onSyncPublish(publish.id)}
+                        disabled={syncingPublishId === publish.id}
+                        className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 sm:w-auto"
+                      >
+                        {syncingPublishId === publish.id
+                          ? "同步中..."
+                          : PUBLISH_ACTION_LABELS.syncRemoteStatus}
+                      </button>
+                    )}
+                    {!onSyncPublish && (
+                      <span className="text-xs font-medium text-gray-500">
+                        {PUBLISH_ACTION_LABELS.syncRemoteStatus}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             ))
@@ -379,4 +447,23 @@ function readPublishErrorMessage(errorJson: unknown): string {
   }
 
   return "发布失败，详情已记录";
+}
+
+function readPublishErrorCode(errorJson: unknown): string | null {
+  if (!errorJson || typeof errorJson !== "object" || Array.isArray(errorJson)) {
+    return null;
+  }
+
+  const candidate = errorJson as {
+    code?: unknown;
+    currentError?: { code?: unknown };
+  };
+  if (typeof candidate.currentError?.code === "string") {
+    return candidate.currentError.code;
+  }
+  if (typeof candidate.code === "string") {
+    return candidate.code;
+  }
+
+  return null;
 }

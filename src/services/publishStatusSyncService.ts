@@ -104,6 +104,7 @@ export async function syncPublishStatus(
   });
 
   if (!syncResult.success) {
+    const sanitizedError = buildStatusSyncError();
     const saved = await prisma.publish.update({
       where: {
         id: publish.id,
@@ -111,7 +112,7 @@ export async function syncPublishStatus(
       data: {
         status: "failed",
         lastSyncedAt: now,
-        errorJson: syncResult.error as Prisma.InputJsonValue,
+        errorJson: sanitizedError,
       },
       select: PUBLISH_SYNC_RECORD_SELECT,
     });
@@ -120,11 +121,9 @@ export async function syncPublishStatus(
       success: false,
       error: {
         code: PUBLISH_STATUS_SYNC_ERROR_CODES.statusSyncFailed,
-        message:
-          serializePublish(saved as PublishRecordForSerialization).errorJson &&
-          typeof syncResult.error.message === "string"
-            ? syncResult.error.message
-            : "发布状态同步失败",
+        message: readStatusSyncErrorMessage(
+          serializePublish(saved as PublishRecordForSerialization).errorJson
+        ),
       },
     };
   }
@@ -157,6 +156,22 @@ export async function syncPublishStatus(
       publish: serializePublish(saved as PublishRecordForSerialization),
     },
   };
+}
+
+function buildStatusSyncError(): Prisma.InputJsonObject {
+  return {
+    code: PUBLISH_STATUS_SYNC_ERROR_CODES.statusSyncFailed,
+    message: "发布状态同步失败",
+  };
+}
+
+function readStatusSyncErrorMessage(errorJson: unknown): string {
+  if (!errorJson || typeof errorJson !== "object" || Array.isArray(errorJson)) {
+    return "发布状态同步失败";
+  }
+
+  const message = (errorJson as { message?: unknown }).message;
+  return typeof message === "string" ? message : "发布状态同步失败";
 }
 
 export async function syncPublishStatusForUser(
